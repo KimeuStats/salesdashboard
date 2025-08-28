@@ -8,43 +8,58 @@ import requests
 # ========== PAGE CONFIG ==========
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
-# ========== BANNER IMAGE FUNCTION ==========
+# ========== STYLES ==========
+st.markdown("""
+    <style>
+        .main .block-container {
+            max-width: 1400px;
+            padding: 2rem 2rem;
+            margin: auto;
+        }
+        .scrollable-table-container {
+            max-height: 550px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding-right: 10px;
+            margin: auto;
+            width: 100%;
+        }
+        .banner {
+            width: 100%;
+            background-color: #3FA0A3;
+            padding: 3px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .banner img {
+            height: 52px;
+            margin-right: 15px;
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(255,255,255,0.7);
+        }
+        .banner h1 {
+            color: white;
+            font-size: 26px;
+            font-weight: bold;
+            margin: 0;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# ========== LOGO ==========
 def load_base64_image_from_url(url):
     response = requests.get(url)
     if response.status_code == 200:
         return base64.b64encode(response.content).decode()
-    else:
-        return None
+    return None
 
-# ===== LOGO (public raw URL from GitHub) =====
 logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
 logo_base64 = load_base64_image_from_url(logo_url)
 
 if logo_base64:
     st.markdown(f"""
-        <style>
-            .banner {{
-                width: 100%;
-                background-color: #3FA0A3;
-                padding: 3px 30px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin-bottom: 20px;
-            }}
-            .banner img {{
-                height: 52px;
-                margin-right: 15px;
-                border: 2px solid white;
-                box-shadow: 0 0 5px rgba(255,255,255,0.7);
-            }}
-            .banner h1 {{
-                color: white;
-                font-size: 26px;
-                font-weight: bold;
-                margin: 0;
-            }}
-        </style>
         <div class="banner">
             <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
             <h1>Muthokinju Paints Sales Dashboard</h1>
@@ -53,18 +68,18 @@ if logo_base64:
 else:
     st.error("⚠️ Failed to load logo image.")
 
-# ========== LOAD EXCEL DATA ==========
+# ========== LOAD DATA ==========
 file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
 
 try:
     sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
     targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
     prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
-    st.success("✅ Data loaded successfully from public GitHub.")
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
+    st.stop()
 
-
+# ========== CLEAN DATA ==========
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
 targets.columns = targets.columns.str.lower()
 prev_year_sales.columns = prev_year_sales.columns.str.lower()
@@ -104,8 +119,6 @@ if isinstance(date_range, tuple) and len(date_range) == 2:
 else:
     st.error("Please select both a start date and an end date.")
     st.stop()
-
-
 
 filtered = sales.copy()
 if selected_cluster != "All":
@@ -188,7 +201,7 @@ total_row = {
 
 df = pd.concat([df[df['branch'] != 'Totals'], pd.DataFrame([total_row])], ignore_index=True)
 
-# ========== FORMATTING ==========
+# ========== FORMAT ==========
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 for col in percent_cols:
     df[col] = (df[col].astype(float) * 100).round(1).astype(str) + '%'
@@ -199,26 +212,7 @@ desired_order = [
 ]
 df = df[desired_order]
 
-# ========== STYLE OVERRIDES ==========
-st.markdown("""
-    <style>
-        .main .block-container {
-            max-width: 1400px;
-            padding: 2rem 2rem;
-            margin: auto;
-        }
-        .scrollable-table-container {
-            max-height: 550px;
-            overflow-y: auto;
-            border: 1px solid #ccc;
-            padding-right: 10px;
-            margin: auto;
-            width: 100%;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# ========== CHART ========== (Updated with toolbar removed)
+# ========== CHART ==========
 st.markdown("### 📊 Sales vs Monthly Target (MTD)")
 df_chart = df[df['branch'] != 'Totals'].copy()
 x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
@@ -232,39 +226,51 @@ fig.update_layout(
     xaxis_tickangle=-45,
     height=500,
     margin=dict(b=150),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    modebar_remove=['zoom', 'pan', 'select', 'lasso2d', 'resetScale2d']
 )
+st.plotly_chart(fig, use_container_width=True)
 
-# Hide toolbar
-st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'displaylogo': False})
+# ========== STYLED TABLE ==========
+format_dict = {
+    'Monthly TGT': "{:,.1f}",
+    'Daily Tgt': "{:,.1f}",
+    'Daily Achieved': "{:,.1f}",
+    'MTD TGT': "{:,.1f}",
+    'MTD Act.': "{:,.1f}",
+    'CM': "{:,.1f}",
+    'Projected landing': "{:,.1f}",
+    'PYM': "{:,.1f}"
+}
 
-# ========== STYLED TABLE (SCROLLABLE & CENTERED) ==========
-st.markdown("### 📋 Detailed Sales Table")
+def highlight_comparisons(val):
+    try:
+        if isinstance(val, str) and val.endswith('%'):
+            numeric_val = float(val.strip('%'))
+            if numeric_val < 0:
+                return 'background-color: #ffc0cb; color: black; font-weight: bold;'
+            elif numeric_val > 0:
+                return 'background-color: #d0f0c0; color: black;'
+    except:
+        pass
+    return ''
+
+def highlight_totals(row):
+    return ['background-color: #b2dfdb; font-weight: bold; font-size:16px; border: 2px solid #00796b'] * len(row) if row['branch'] == 'Totals' else [''] * len(row)
 
 styled_df = df.style.format(format_dict)\
     .map(highlight_comparisons, subset=percent_cols)\
     .apply(highlight_totals, axis=1)\
     .set_table_styles([
-        {'selector': 'thead th', 'props': [
-            ('background-color', '#b2dfdb'),
-            ('color', 'black'),
-            ('font-weight', 'bold'),
-            ('text-align', 'center'),
-            ('font-size', '13px'),
-            ('border', '1px solid #999'),
-            ('white-space', 'nowrap'),
-            ('padding', '5px')
-        ]},
-        {'selector': 'td', 'props': [
-            ('text-align', 'center'),
-            ('font-size', '13px'),
-            ('white-space', 'nowrap'),
-            ('padding', '5px')
-        ]}
-    ])\
-    .applymap(highlight_branch, subset=['branch'])
+        {'selector': 'thead th', 'props': [('background-color', '#b2dfdb'), ('color', 'black'),
+                                           ('font-weight', 'bold'), ('text-align', 'center'),
+                                           ('font-size', '13px'), ('border', '1px solid #999'),
+                                           ('white-space', 'nowrap'), ('padding', '5px')]},
+        {'selector': 'td', 'props': [('text-align', 'center'), ('font-size', '13px'),
+                                     ('white-space', 'nowrap'), ('padding', '5px')]}
+    ])
 
-# Show styled table inside scrollable div
+# Scrollable Table Container
 st.markdown("<div class='scrollable-table-container'>", unsafe_allow_html=True)
 st.markdown(styled_df.to_html(), unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
