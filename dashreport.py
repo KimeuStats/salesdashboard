@@ -4,37 +4,37 @@ import base64
 import requests
 import io
 
-# ====== CONFIG ======
+# ====== PAGE CONFIG ======
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
 # ====== GITHUB AUTH SETUP ======
-GITHUB_PAT = st.secrets["github_pat"]  # Store your PAT securely in Streamlit secrets
-REPO = "kimeustats/salesdashboard"
-BRANCH = "main"
+GITHUB_PAT = st.secrets["github_pat"]  # Stored securely in Streamlit secrets
+REPO = "kimeustats/salesdashboard"      # Your private repo
+BRANCH = "main"                         # Branch name
 
-# ====== FUNCTIONS ======
+# ====== HELPER FUNCTIONS ======
 
-def get_github_file_content(file_path):
+def get_github_file_content(file_path: str) -> bytes:
     """
-    Fetch file content from private GitHub repo using API and PAT.
-    Returns bytes.
+    Fetches a file from a private GitHub repo using API and Personal Access Token.
+    Returns decoded bytes of file content.
     """
-    url = f"https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}"
+    api_url = f"https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}"
     headers = {"Authorization": f"token {GITHUB_PAT}"}
-    response = requests.get(url, headers=headers)
+    response = requests.get(api_url, headers=headers)
     response.raise_for_status()
-    data = response.json()
-    file_content = base64.b64decode(data['content'])
-    return file_content
+    content_json = response.json()
+    return base64.b64decode(content_json["content"])
 
-def load_base64_image_from_github(file_path):
+def load_base64_image_from_github(file_path: str) -> str:
     """
-    Load an image file from GitHub and return base64 encoded string.
+    Loads an image file, fetches via GitHub API, and returns it as base64 encoded string.
     """
     content = get_github_file_content(file_path)
     return base64.b64encode(content).decode()
 
-# ====== LOAD AND SHOW BANNER ======
+# ====== LOAD AND DISPLAY BANNER ======
+
 try:
     logo_base64 = load_base64_image_from_github("nhmllogo.png")
     st.markdown(f"""
@@ -70,24 +70,24 @@ except Exception as e:
     st.error(f"⚠️ Failed to load logo image: {e}")
 
 # ====== LOAD EXCEL DATA ======
+
 try:
-    excel_content = get_github_file_content("data1.xlsx")
-    sales = pd.read_excel(io.BytesIO(excel_content), sheet_name="CY", engine="openpyxl")
-    targets = pd.read_excel(io.BytesIO(excel_content), sheet_name="TARGETS", engine="openpyxl")
-    prev_year_sales = pd.read_excel(io.BytesIO(excel_content), sheet_name="PY", engine="openpyxl")
+    excel_bytes = get_github_file_content("data1.xlsx")
+    excel_io = io.BytesIO(excel_bytes)
 
-    # Continue your dashboard code here using sales, targets, prev_year_sales
-    st.write("Sales data loaded successfully!")
+    sales = pd.read_excel(excel_io, sheet_name="CY", engine="openpyxl")
+    excel_io.seek(0)
+    targets = pd.read_excel(excel_io, sheet_name="TARGETS", engine="openpyxl")
+    excel_io.seek(0)
+    prev_year_sales = pd.read_excel(excel_io, sheet_name="PY", engine="openpyxl")
+
+    st.success("Excel file loaded successfully!")
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
 
-# ====== Your dashboard code continues here ======
+# ====== REST OF YOUR DASHBOARD LOGIC ====== 
+# (e.g., filters, charts, tables, etc.)
 
-
-    # Continue your dashboard logic here...
-
-except Exception as e:
-    st.error(f"⚠️ Failed to load Excel data: {e}")
 
 
 
