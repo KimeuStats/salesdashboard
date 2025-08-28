@@ -1,71 +1,68 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.graph_objs as go
 import base64
 import requests
-import io
 
-# ---- PAGE CONFIG ----
+# ========== PAGE CONFIG ==========
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
-# ---- GITHUB AUTH ----
-GITHUB_PAT = st.secrets["github_pat"]
-REPO = "kimeustats/salesdashboard"
-BRANCH = "main"
+# ========== BANNER IMAGE FUNCTION ==========
+def load_base64_image_from_url(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return base64.b64encode(response.content).decode()
+    else:
+        return None
 
-def get_github_file_content(file_path: str) -> bytes:
-    """Fetch file from private GitHub repo using API & PAT."""
-    api_url = f"https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}"
-    headers = {"Authorization": f"token {GITHUB_PAT}"}
-    resp = requests.get(api_url, headers=headers)
-    resp.raise_for_status()
-    data = resp.json()
-    return base64.b64decode(data["content"])
+# ===== LOGO (public raw URL from GitHub) =====
+logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
+logo_base64 = load_base64_image_from_url(logo_url)
 
-# ---- BANNER ----
-try:
-    logo_bytes = get_github_file_content("nhmllogo.png")
-    logo_b64 = base64.b64encode(logo_bytes).decode()
+if logo_base64:
     st.markdown(f"""
         <style>
             .banner {{
-                width: 100%; background-color: #3FA0A3;
-                padding: 3px 30px; display: flex;
-                align-items: center; justify-content: center;
+                width: 100%;
+                background-color: #3FA0A3;
+                padding: 3px 30px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
                 margin-bottom: 20px;
             }}
             .banner img {{
-                height: 52px; margin-right: 15px;
+                height: 52px;
+                margin-right: 15px;
                 border: 2px solid white;
                 box-shadow: 0 0 5px rgba(255,255,255,0.7);
             }}
             .banner h1 {{
-                color: white; font-size: 26px;
-                font-weight: bold; margin: 0;
+                color: white;
+                font-size: 26px;
+                font-weight: bold;
+                margin: 0;
             }}
         </style>
         <div class="banner">
-            <img src="data:image/png;base64,{logo_b64}" alt="Logo" />
+            <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
             <h1>Muthokinju Paints Sales Dashboard</h1>
         </div>
     """, unsafe_allow_html=True)
-except Exception as e:
-    st.error(f"⚠️ Failed to load logo image: {e}")
+else:
+    st.error("⚠️ Failed to load logo image.")
 
-# ---- LOAD EXCEL DATA ----
+# ========== LOAD EXCEL DATA ==========
+file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
+
 try:
-    excel_bytes = get_github_file_content("data1.xlsx")
-    bio = io.BytesIO(excel_bytes)
-    sales = pd.read_excel(bio, sheet_name="CY", engine="openpyxl")
-    bio.seek(0)
-    targets = pd.read_excel(bio, sheet_name="TARGETS", engine="openpyxl")
-    bio.seek(0)
-    prev_year_sales = pd.read_excel(bio, sheet_name="PY", engine="openpyxl")
-    st.success("Excel data loaded successfully!")
+    sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
+    targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
+    prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
+    st.success("✅ Data loaded successfully from public GitHub.")
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
-
-
-
 
 
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
