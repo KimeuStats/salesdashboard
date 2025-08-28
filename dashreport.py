@@ -3,48 +3,54 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
 import base64
-
+import requests
 # ========== PAGE CONFIG ==========
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
 # ========== BANNER ==========
-def load_base64_image(path):
-    with open(path, "rb") as f:
-        data = f.read()
-        return base64.b64encode(data).decode()
+def load_base64_image_from_url(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return base64.b64encode(response.content).decode()
+    else:
+        return None
 
-logo_path = r"C:\Users\muthokinju\Desktop\PETER2025\nhmllogo.png"
-logo_base64 = load_base64_image(logo_path)
-st.markdown(f"""
-    <style>
-        .banner {{
-            width: 100%;
-            background-color: #3FA0A3;
-            padding: 3px 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-        }}
-        .banner img {{
-            height: 52px;
-            margin-right: 15px;
-            border: 2px solid white;
-            box-shadow: 0 0 5px rgba(255,255,255,0.7);
-        }}
-        .banner h1 {{
-            color: white;
-            font-size: 26px;
-            font-weight: bold;
-            margin: 0;
-        }}
-    </style>
-    <div class="banner">
-        <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
-        <h1>Muthokinju Paints Sales Dashboard</h1>
-    </div>
-""", unsafe_allow_html=True)
+# GitHub raw image URL
+logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
+logo_base64 = load_base64_image_from_url(logo_url)
 
+if logo_base64:
+    st.markdown(f"""
+        <style>
+            .banner {{
+                width: 100%;
+                background-color: #3FA0A3;
+                padding: 3px 30px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 20px;
+            }}
+            .banner img {{
+                height: 52px;
+                margin-right: 15px;
+                border: 2px solid white;
+                box-shadow: 0 0 5px rgba(255,255,255,0.7);
+            }}
+            .banner h1 {{
+                color: white;
+                font-size: 26px;
+                font-weight: bold;
+                margin: 0;
+            }}
+        </style>
+        <div class="banner">
+            <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
+            <h1>Muthokinju Paints Sales Dashboard</h1>
+        </div>
+    """, unsafe_allow_html=True)
+else:
+    st.error("⚠️ Failed to load logo image.")
 # ========== LOAD DATA ==========
 file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
 
