@@ -199,7 +199,26 @@ desired_order = [
 ]
 df = df[desired_order]
 
-# ========== CHART ==========
+# ========== STYLE OVERRIDES ==========
+st.markdown("""
+    <style>
+        .main .block-container {
+            max-width: 1400px;
+            padding: 2rem 2rem;
+            margin: auto;
+        }
+        .scrollable-table-container {
+            max-height: 550px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding-right: 10px;
+            margin: auto;
+            width: 100%;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# ========== CHART ========== (Updated with toolbar removed)
 st.markdown("### 📊 Sales vs Monthly Target (MTD)")
 df_chart = df[df['branch'] != 'Totals'].copy()
 x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
@@ -215,37 +234,12 @@ fig.update_layout(
     margin=dict(b=150),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
-st.plotly_chart(fig, use_container_width=True)
 
-# ========== STYLED TABLE ==========
-format_dict = {
-    'Monthly TGT': "{:,.1f}",
-    'Daily Tgt': "{:,.1f}",
-    'Daily Achieved': "{:,.1f}",
-    'MTD TGT': "{:,.1f}",
-    'MTD Act.': "{:,.1f}",
-    'CM': "{:,.1f}",
-    'Projected landing': "{:,.1f}",
-    'PYM': "{:,.1f}"
-}
+# Hide toolbar
+st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'displaylogo': False})
 
-def highlight_comparisons(val):
-    try:
-        if isinstance(val, str) and val.endswith('%'):
-            numeric_val = float(val.strip('%'))
-            if numeric_val < 0:
-                return 'background-color: #ffc0cb; color: black; font-weight: bold;'
-            elif numeric_val > 0:
-                return 'background-color: #d0f0c0; color: black;'
-    except:
-        pass
-    return ''
-
-def highlight_totals(row):
-    return ['background-color: #b2dfdb; font-weight: bold; font-size:16px; border: 2px solid #00796b'] * len(row) if row['branch'] == 'Totals' else [''] * len(row)
-
-def highlight_branch(val):
-    return 'font-weight: bold;' if val else ''
+# ========== STYLED TABLE (SCROLLABLE & CENTERED) ==========
+st.markdown("### 📋 Detailed Sales Table")
 
 styled_df = df.style.format(format_dict)\
     .map(highlight_comparisons, subset=percent_cols)\
@@ -270,8 +264,7 @@ styled_df = df.style.format(format_dict)\
     ])\
     .applymap(highlight_branch, subset=['branch'])
 
-st.markdown("<div style='max-width: 1300px; margin: auto;'>", unsafe_allow_html=True)
+# Show styled table inside scrollable div
+st.markdown("<div class='scrollable-table-container'>", unsafe_allow_html=True)
 st.markdown(styled_df.to_html(), unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
-
-
