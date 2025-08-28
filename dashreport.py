@@ -1,23 +1,36 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import plotly.graph_objs as go
 import base64
 import requests
-# ========== PAGE CONFIG ==========
-st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
+import io
+
+# Your GitHub repo info
+REPO = "kimeustats/salesdashboard"  # username/repo
+BRANCH = "main"                      # branch name
+
+# Get your GitHub PAT from Streamlit secrets
+GITHUB_TOKEN = st.secrets["github_token"]
+
+def get_github_file_content(path):
+    url = f"https://api.github.com/repos/{REPO}/contents/{path}?ref={BRANCH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        file_content = response.json()
+        import base64
+        return base64.b64decode(file_content["content"])
+    else:
+        st.error(f"Error fetching {path} from GitHub: {response.status_code}")
+        st.stop()
 
 # ========== BANNER ==========
-def load_base64_image_from_url(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        return base64.b64encode(response.content).decode()
-    else:
-        return None
+def load_base64_image_from_github(path):
+    content = get_github_file_content(path)
+    if content:
+        return base64.b64encode(content).decode()
+    return None
 
-# GitHub raw image URL
-logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
-logo_base64 = load_base64_image_from_url(logo_url)
+logo_base64 = load_base64_image_from_github("nhmllogo.png")
 
 if logo_base64:
     st.markdown(f"""
@@ -51,12 +64,14 @@ if logo_base64:
     """, unsafe_allow_html=True)
 else:
     st.error("⚠️ Failed to load logo image.")
-# ========== LOAD DATA ==========
-file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
 
-sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
-targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
-prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
+# ========== LOAD DATA ==========
+file_content = get_github_file_content("data1.xlsx")
+
+sales = pd.read_excel(io.BytesIO(file_content), sheet_name="CY", engine="openpyxl")
+targets = pd.read_excel(io.BytesIO(file_content), sheet_name="TARGETS", engine="openpyxl")
+prev_year_sales = pd.read_excel(io.BytesIO(file_content), sheet_name="PY", engine="openpyxl")
+
 
 
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
