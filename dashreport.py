@@ -4,89 +4,66 @@ import base64
 import requests
 import io
 
-# ====== PAGE CONFIG ======
+# ---- PAGE CONFIG ----
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
-# ====== GITHUB AUTH SETUP ======
-GITHUB_PAT = st.secrets["github_pat"]  # Stored securely in Streamlit secrets
-REPO = "kimeustats/salesdashboard"      # Your private repo
-BRANCH = "main"                         # Branch name
-
-# ====== HELPER FUNCTIONS ======
+# ---- GITHUB AUTH ----
+GITHUB_PAT = st.secrets["github_pat"]
+REPO = "kimeustats/salesdashboard"
+BRANCH = "main"
 
 def get_github_file_content(file_path: str) -> bytes:
-    """
-    Fetches a file from a private GitHub repo using API and Personal Access Token.
-    Returns decoded bytes of file content.
-    """
+    """Fetch file from private GitHub repo using API & PAT."""
     api_url = f"https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}"
     headers = {"Authorization": f"token {GITHUB_PAT}"}
-    response = requests.get(api_url, headers=headers)
-    response.raise_for_status()
-    content_json = response.json()
-    return base64.b64decode(content_json["content"])
+    resp = requests.get(api_url, headers=headers)
+    resp.raise_for_status()
+    data = resp.json()
+    return base64.b64decode(data["content"])
 
-def load_base64_image_from_github(file_path: str) -> str:
-    """
-    Loads an image file, fetches via GitHub API, and returns it as base64 encoded string.
-    """
-    content = get_github_file_content(file_path)
-    return base64.b64encode(content).decode()
-
-# ====== LOAD AND DISPLAY BANNER ======
-
+# ---- BANNER ----
 try:
-    logo_base64 = load_base64_image_from_github("nhmllogo.png")
+    logo_bytes = get_github_file_content("nhmllogo.png")
+    logo_b64 = base64.b64encode(logo_bytes).decode()
     st.markdown(f"""
         <style>
             .banner {{
-                width: 100%;
-                background-color: #3FA0A3;
-                padding: 3px 30px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                width: 100%; background-color: #3FA0A3;
+                padding: 3px 30px; display: flex;
+                align-items: center; justify-content: center;
                 margin-bottom: 20px;
             }}
             .banner img {{
-                height: 52px;
-                margin-right: 15px;
+                height: 52px; margin-right: 15px;
                 border: 2px solid white;
                 box-shadow: 0 0 5px rgba(255,255,255,0.7);
             }}
             .banner h1 {{
-                color: white;
-                font-size: 26px;
-                font-weight: bold;
-                margin: 0;
+                color: white; font-size: 26px;
+                font-weight: bold; margin: 0;
             }}
         </style>
         <div class="banner">
-            <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
+            <img src="data:image/png;base64,{logo_b64}" alt="Logo" />
             <h1>Muthokinju Paints Sales Dashboard</h1>
         </div>
     """, unsafe_allow_html=True)
 except Exception as e:
     st.error(f"⚠️ Failed to load logo image: {e}")
 
-# ====== LOAD EXCEL DATA ======
-
+# ---- LOAD EXCEL DATA ----
 try:
     excel_bytes = get_github_file_content("data1.xlsx")
-    excel_io = io.BytesIO(excel_bytes)
-
-    sales = pd.read_excel(excel_io, sheet_name="CY", engine="openpyxl")
-    excel_io.seek(0)
-    targets = pd.read_excel(excel_io, sheet_name="TARGETS", engine="openpyxl")
-    excel_io.seek(0)
-    prev_year_sales = pd.read_excel(excel_io, sheet_name="PY", engine="openpyxl")
-
-    st.success("Excel file loaded successfully!")
+    bio = io.BytesIO(excel_bytes)
+    sales = pd.read_excel(bio, sheet_name="CY", engine="openpyxl")
+    bio.seek(0)
+    targets = pd.read_excel(bio, sheet_name="TARGETS", engine="openpyxl")
+    bio.seek(0)
+    prev_year_sales = pd.read_excel(bio, sheet_name="PY", engine="openpyxl")
+    st.success("Excel data loaded successfully!")
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
 
-# ====== REST OF YOUR DASHBOARD LOGIC ====== 
-# (e.g., filters, charts, tables, etc.)
 
 
 
