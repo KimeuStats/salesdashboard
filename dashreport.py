@@ -46,10 +46,12 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ========== LOAD DATA ==========
-file_path = r"C:\Users\muthokinju\Desktop\PETER2025\data1.xlsx"
-sales = pd.read_excel(file_path, sheet_name="CY", engine="openpyxl")
-targets = pd.read_excel(file_path, sheet_name="TARGETS", engine="openpyxl")
-prev_year_sales = pd.read_excel(file_path, sheet_name="PY", engine="openpyxl")
+file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
+
+sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
+targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
+prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
+
 
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
 targets.columns = targets.columns.str.lower()
