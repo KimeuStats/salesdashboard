@@ -1,38 +1,46 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.graph_objs as go
 import base64
 import requests
 import io
 
-# Your GitHub repo info
-REPO = "kimeustats/salesdashboard"  # username/repo
-BRANCH = "main"                      # branch name
+# ====== CONFIG ======
+st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
-# Get your GitHub PAT from Streamlit secrets
-GITHUB_TOKEN = st.secrets["github_token"]
+# ====== GITHUB AUTH SETUP ======
+# Paste your GitHub PAT here as a string (OR better: use environment variables for security)
+GITHUB_PAT = "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"  # <--- Replace with your actual PAT (keep private)
+REPO = "kimeustats/salesdashboard"
+BRANCH = "main"
 
-def get_github_file_content(path):
-    url = f"https://api.github.com/repos/{REPO}/contents/{path}?ref={BRANCH}"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+# ====== FUNCTIONS ======
+
+def get_github_file_content(file_path):
+    """
+    Get the raw content of a file from a private GitHub repo using API and PAT.
+    Returns bytes.
+    """
+    url = f"https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}"
+    headers = {"Authorization": f"token {GITHUB_PAT}"}
     response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        file_content = response.json()
-        import base64
-        return base64.b64decode(file_content["content"])
-    else:
-        st.error(f"Error fetching {path} from GitHub: {response.status_code}")
-        st.stop()
+    response.raise_for_status()
+    data = response.json()
+    file_content = base64.b64decode(data['content'])
+    return file_content
 
-# ========== BANNER ==========
-def load_base64_image_from_github(path):
-    content = get_github_file_content(path)
-    if content:
-        return base64.b64encode(content).decode()
-    return None
+def load_base64_image_from_github(file_path):
+    """
+    Load image file content from GitHub and return base64 encoded string.
+    """
+    content = get_github_file_content(file_path)
+    return base64.b64encode(content).decode()
 
-logo_base64 = load_base64_image_from_github("nhmllogo.png")
+# ====== LOAD AND SHOW BANNER ======
 
-if logo_base64:
+try:
+    logo_base64 = load_base64_image_from_github("nhmllogo.png")
     st.markdown(f"""
         <style>
             .banner {{
@@ -62,16 +70,24 @@ if logo_base64:
             <h1>Muthokinju Paints Sales Dashboard</h1>
         </div>
     """, unsafe_allow_html=True)
-else:
-    st.error("⚠️ Failed to load logo image.")
+except Exception as e:
+    st.error(f"⚠️ Failed to load logo image: {e}")
 
-# ========== LOAD DATA ==========
-file_content = get_github_file_content("data1.xlsx")
+# ====== LOAD EXCEL DATA ======
 
-sales = pd.read_excel(io.BytesIO(file_content), sheet_name="CY", engine="openpyxl")
-targets = pd.read_excel(io.BytesIO(file_content), sheet_name="TARGETS", engine="openpyxl")
-prev_year_sales = pd.read_excel(io.BytesIO(file_content), sheet_name="PY", engine="openpyxl")
+try:
+    excel_content = get_github_file_content("data1.xlsx")
 
+    sales = pd.read_excel(io.BytesIO(excel_content), sheet_name="CY", engine="openpyxl")
+    targets = pd.read_excel(io.BytesIO(excel_content), sheet_name="TARGETS", engine="openpyxl")
+    prev_year_sales = pd.read_excel(io.BytesIO(excel_content), sheet_name="PY", engine="openpyxl")
+
+    # Now you can continue with your dashboard code using these dataframes
+except Exception as e:
+    st.error(f"⚠️ Failed to load Excel data: {e}")
+
+# ====== Rest of your app below ======
+# e.g., your plotting, filters, display, etc.
 
 
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
