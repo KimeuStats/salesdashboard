@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import plotly.graph_objs as go
 import base64
 import requests
 import io
@@ -10,13 +8,17 @@ import io
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
 # ====== GITHUB AUTH SETUP ======
-GITHUB_PAT = st.secrets["GITHUB_PAT"]  # Best to store your PAT securely in Streamlit secrets
+GITHUB_PAT = st.secrets["github_pat"]  # Store your PAT securely in Streamlit secrets
 REPO = "kimeustats/salesdashboard"
 BRANCH = "main"
 
 # ====== FUNCTIONS ======
 
 def get_github_file_content(file_path):
+    """
+    Fetch file content from private GitHub repo using API and PAT.
+    Returns bytes.
+    """
     url = f"https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}"
     headers = {"Authorization": f"token {GITHUB_PAT}"}
     response = requests.get(url, headers=headers)
@@ -26,11 +28,13 @@ def get_github_file_content(file_path):
     return file_content
 
 def load_base64_image_from_github(file_path):
+    """
+    Load an image file from GitHub and return base64 encoded string.
+    """
     content = get_github_file_content(file_path)
     return base64.b64encode(content).decode()
 
 # ====== LOAD AND SHOW BANNER ======
-
 try:
     logo_base64 = load_base64_image_from_github("nhmllogo.png")
     st.markdown(f"""
@@ -66,17 +70,19 @@ except Exception as e:
     st.error(f"⚠️ Failed to load logo image: {e}")
 
 # ====== LOAD EXCEL DATA ======
-
 try:
     excel_content = get_github_file_content("data1.xlsx")
+    sales = pd.read_excel(io.BytesIO(excel_content), sheet_name="CY", engine="openpyxl")
+    targets = pd.read_excel(io.BytesIO(excel_content), sheet_name="TARGETS", engine="openpyxl")
+    prev_year_sales = pd.read_excel(io.BytesIO(excel_content), sheet_name="PY", engine="openpyxl")
 
-    excel_io = io.BytesIO(excel_content)
+    # Continue your dashboard code here using sales, targets, prev_year_sales
+    st.write("Sales data loaded successfully!")
+except Exception as e:
+    st.error(f"⚠️ Failed to load Excel data: {e}")
 
-    sales = pd.read_excel(excel_io, sheet_name="CY", engine="openpyxl")
-    excel_io.seek(0)
-    targets = pd.read_excel(excel_io, sheet_name="TARGETS", engine="openpyxl")
-    excel_io.seek(0)
-    prev_year_sales = pd.read_excel(excel_io, sheet_name="PY", engine="openpyxl")
+# ====== Your dashboard code continues here ======
+
 
     # Continue your dashboard logic here...
 
