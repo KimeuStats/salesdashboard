@@ -10,18 +10,13 @@ import io
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
 # ====== GITHUB AUTH SETUP ======
-# Paste your GitHub PAT here as a string (OR better: use environment variables for security)
-GITHUB_PAT = "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"  # <--- Replace with your actual PAT (keep private)
+GITHUB_PAT = st.secrets["GITHUB_PAT"]  # Best to store your PAT securely in Streamlit secrets
 REPO = "kimeustats/salesdashboard"
 BRANCH = "main"
 
 # ====== FUNCTIONS ======
 
 def get_github_file_content(file_path):
-    """
-    Get the raw content of a file from a private GitHub repo using API and PAT.
-    Returns bytes.
-    """
     url = f"https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}"
     headers = {"Authorization": f"token {GITHUB_PAT}"}
     response = requests.get(url, headers=headers)
@@ -31,9 +26,6 @@ def get_github_file_content(file_path):
     return file_content
 
 def load_base64_image_from_github(file_path):
-    """
-    Load image file content from GitHub and return base64 encoded string.
-    """
     content = get_github_file_content(file_path)
     return base64.b64encode(content).decode()
 
@@ -78,16 +70,19 @@ except Exception as e:
 try:
     excel_content = get_github_file_content("data1.xlsx")
 
-    sales = pd.read_excel(io.BytesIO(excel_content), sheet_name="CY", engine="openpyxl")
-    targets = pd.read_excel(io.BytesIO(excel_content), sheet_name="TARGETS", engine="openpyxl")
-    prev_year_sales = pd.read_excel(io.BytesIO(excel_content), sheet_name="PY", engine="openpyxl")
+    excel_io = io.BytesIO(excel_content)
 
-    # Now you can continue with your dashboard code using these dataframes
+    sales = pd.read_excel(excel_io, sheet_name="CY", engine="openpyxl")
+    excel_io.seek(0)
+    targets = pd.read_excel(excel_io, sheet_name="TARGETS", engine="openpyxl")
+    excel_io.seek(0)
+    prev_year_sales = pd.read_excel(excel_io, sheet_name="PY", engine="openpyxl")
+
+    # Continue your dashboard logic here...
+
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
 
-# ====== Rest of your app below ======
-# e.g., your plotting, filters, display, etc.
 
 
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
