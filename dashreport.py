@@ -6,9 +6,7 @@ import base64
 import requests
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 import streamlit.components.v1 as components
-import imgkit
-import tempfile
-from datetime import datetime
+import io
 
 
 # === PAGE CONFIG ===
@@ -344,11 +342,18 @@ AgGrid(
 )
 
 # === DOWNLOAD BUTTONS ===
-csv_data = df.to_csv(index=False).encode('utf-8')
+import io
+
+# Prepare Excel download
+excel_buffer = io.BytesIO()
+with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+    df.to_excel(writer, index=False, sheet_name='Performance')
+    writer.save()
+excel_data = excel_buffer.getvalue()
 
 col1, col2 = st.columns(2)
 
-# === CSV Download ===
+# CSV Download
 with col1:
     st.download_button(
         "📥 Download Table as CSV",
@@ -357,54 +362,12 @@ with col1:
         mime='text/csv'
     )
 
-# === Image Download using imgkit ===
+# Excel Download
 with col2:
-    if st.button("📸 Download Table as Image"):
-        # Style table as HTML
-        styled_html = df_display.drop(columns=['is_totals']).to_html(index=False, border=1, justify='center')
-        styled_html = f"""
-        <html>
-        <head>
-            <style>
-                table {{
-                    border-collapse: collapse;
-                    width: 100%;
-                    font-family: Arial, sans-serif;
-                    font-size: 12px;
-                }}
-                th {{
-                    background-color: #d3d3d3;
-                    color: #000;
-                    font-weight: bold;
-                    padding: 6px;
-                    border: 1px solid #999;
-                    text-align: center;
-                }}
-                td {{
-                    border: 1px solid #ccc;
-                    padding: 4px;
-                    text-align: center;
-                }}
-                tr:last-child td {{
-                    background-color: #b2dfdb;
-                    font-weight: bold;
-                }}
-            </style>
-        </head>
-        <body>{styled_html}</body>
-        </html>
-        """
+    st.download_button(
+        "📥 Download Table as Excel",
+        data=excel_data,
+        file_name='sales_dashboard.xlsx',
+        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
-        # Save as PNG using imgkit
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as f:
-            try:
-                imgkit.from_string(styled_html, f.name)
-                with open(f.name, "rb") as img_file:
-                    st.download_button(
-                        label="📷 Download Image (PNG)",
-                        data=img_file,
-                        file_name=f"performance_table_{datetime.now().strftime('%Y%m%d')}.png",
-                        mime="image/png"
-                    )
-            except Exception as e:
-                st.error(f"Image generation failed: {e}")
