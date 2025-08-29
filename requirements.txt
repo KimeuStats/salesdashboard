@@ -4,4 +4,4 @@ numpy
 plotly
 openpyxl
 requests
-dataframe-image
+
