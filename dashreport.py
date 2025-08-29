@@ -271,6 +271,15 @@ for col in percent_cols:
         valueFormatter="(x * 100).toFixed(1) + '%'"
     )
 
+# Round all other numeric columns to 1 decimal place
+numeric_cols = df_display.select_dtypes(include=[np.number]).columns.difference(percent_cols).tolist()
+for col in numeric_cols:
+    gb.configure_column(
+        col,
+        type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+        valueFormatter="Number(x).toFixed(1)"
+    )
+
 # Style the Totals row (background color and font weight)
 totals_row_style = JsCode("""
 function(params) {
@@ -290,12 +299,14 @@ gb.configure_grid_options(getRowStyle=totals_row_style)
 # === Add CSS for cell borders ===
 st.markdown("""
 <style>
-    /* Add borders around cells and headers */
+    /* Stronger borders for cells and headers */
     .ag-theme-material .ag-cell, 
-    .ag-theme-material .ag-header-cell {
+    .ag-theme-material .ag-header-cell,
+    .ag-theme-material .ag-cell-focus,
+    .ag-theme-material .ag-header-cell-label {
         border: 1px solid #ccc !important;
     }
-    /* Optional: add hover highlight for rows */
+    /* Optional: row hover highlight */
     .ag-theme-material .ag-row-hover {
         background-color: #f1f1f1 !important;
     }
@@ -312,9 +323,10 @@ AgGrid(
     theme="material",
     height=500,
     fit_columns_on_grid_load=True,
-    domLayout='autoHeight',               # auto height for grid
-    enableCellTextSelection=True          # allow selecting/copying text in cells
+    domLayout='autoHeight',
+    enableCellTextSelection=True
 )
+
 
 
 # === DOWNLOAD ===
