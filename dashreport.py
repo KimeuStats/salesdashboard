@@ -6,6 +6,11 @@ import base64
 import requests
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 import streamlit.components.v1 as components
+import imgkit
+import tempfile
+from datetime import datetime
+
+
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
@@ -238,41 +243,32 @@ st.plotly_chart(fig, use_container_width=True)
 
 
 
+import tempfile
+import imgkit
+from datetime import datetime
+
 # === Prepare dataframe for AgGrid ===
 df_display = df.copy()
 
-# Calculate totals using safe division
-def safe_div(numerator, denominator):
-    return (numerator - denominator) / denominator if denominator != 0 else 0
-
-# Create totals row dict
+# Column totals for numeric columns only
 totals_dict = {col: df[col].sum() if pd.api.types.is_numeric_dtype(df[col]) else '' for col in df.columns}
 totals_dict['branch'] = 'Totals'
 totals_dict['category1'] = ''
 
-# Recalculate percentage fields based on totals
-totals_dict['Achieved vs Daily Tgt'] = safe_div(totals_dict['Daily Achieved'], totals_dict['Daily Tgt'])
-totals_dict['MTD Var'] = safe_div(totals_dict['MTD Act.'], totals_dict['MTD TGT'])
-totals_dict['Achieved VS Monthly tgt'] = safe_div(totals_dict['MTD Act.'], totals_dict['Monthly TGT'])
-totals_dict['CM VS PYM'] = safe_div(totals_dict['CM'], totals_dict['PYM'])
-
-# Add totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals_dict])], ignore_index=True)
 df_display['is_totals'] = df_display['branch'] == 'Totals'
 
-# Columns to treat as percentages
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-# Round numeric values and convert % columns
+# Round numeric columns to 1dp and percent columns to %
 for col in df_display.columns:
     if col in percent_cols:
-        df_display[col] = (df_display[col] * 100).round(1)
+        df_display[col] = (df_display[col].astype(float) * 100).round(1)
     elif pd.api.types.is_numeric_dtype(df_display[col]):
         df_display[col] = df_display[col].round(1)
 
 # === Build GridOptions ===
 gb = GridOptionsBuilder.from_dataframe(df_display)
-
 gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
 gb.configure_column("is_totals", hide=True)
 
@@ -298,7 +294,7 @@ for col in percent_cols:
         headerClass='header-center'
     )
 
-# Style totals row
+# Totals row styling
 totals_row_style = JsCode("""
 function(params) {
     if (params.data.is_totals) {
@@ -315,7 +311,7 @@ function(params) {
 
 gb.configure_grid_options(getRowStyle=totals_row_style)
 
-# === Custom CSS ===
+# === Custom CSS for header and borders ===
 custom_css = """
 .ag-theme-material .ag-header-cell-label {
     justify-content: center !important;
@@ -331,11 +327,10 @@ custom_css = """
     border-bottom: 1px solid #ccc !important;
 }
 """
-
 st.markdown(f"<style>{custom_css}</style>", unsafe_allow_html=True)
 
-# === Render the grid ===
-st.markdown("### <center>📋 <span style='color:#7b38d8; font-weight:bold;'>PERFORMANCE TABLE</span></center>", unsafe_allow_html=True)
+# === Render Table ===
+st.markdown("### <center>📋 <span style='font-size:22px; font-weight:bold; color:#7b38d8;'>PERFORMANCE TABLE</span></center>", unsafe_allow_html=True)
 
 AgGrid(
     df_display,
@@ -348,36 +343,68 @@ AgGrid(
     reload_data=True
 )
 
-# === DOWNLOAD CSV ===
+# === DOWNLOAD BUTTONS ===
 csv_data = df.to_csv(index=False).encode('utf-8')
+
 col1, col2 = st.columns(2)
+
+# === CSV Download ===
 with col1:
-    st.download_button("📥 Download Table as CSV", data=csv_data, file_name='sales_dashboard.csv', mime='text/csv')
+    st.download_button(
+        "📥 Download Table as CSV",
+        data=csv_data,
+        file_name='sales_dashboard.csv',
+        mime='text/csv'
+    )
 
-# === DOWNLOAD IMAGE BUTTON (experimental) ===
+# === Image Download using imgkit ===
 with col2:
-    st.markdown("### ")
-    st.markdown("⬇️ **Download as Image** (screenshot table below)")
+    if st.button("📸 Download Table as Image"):
+        # Style table as HTML
+        styled_html = df_display.drop(columns=['is_totals']).to_html(index=False, border=1, justify='center')
+        styled_html = f"""
+        <html>
+        <head>
+            <style>
+                table {{
+                    border-collapse: collapse;
+                    width: 100%;
+                    font-family: Arial, sans-serif;
+                    font-size: 12px;
+                }}
+                th {{
+                    background-color: #d3d3d3;
+                    color: #000;
+                    font-weight: bold;
+                    padding: 6px;
+                    border: 1px solid #999;
+                    text-align: center;
+                }}
+                td {{
+                    border: 1px solid #ccc;
+                    padding: 4px;
+                    text-align: center;
+                }}
+                tr:last-child td {{
+                    background-color: #b2dfdb;
+                    font-weight: bold;
+                }}
+            </style>
+        </head>
+        <body>{styled_html}</body>
+        </html>
+        """
 
-    components.html("""
-    <html>
-    <head>
-      <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-    </head>
-    <body>
-      <button onclick="downloadImage()" style="padding: 10px 20px; font-weight: bold; background-color: #7b38d8; color: white; border: none; border-radius: 5px;">
-        📸 Screenshot Table
-      </button>
-      <script>
-        function downloadImage() {
-          html2canvas(document.querySelector('.main')).then(canvas => {
-            var link = document.createElement('a');
-            link.download = 'table_screenshot.png';
-            link.href = canvas.toDataURL();
-            link.click();
-          });
-        }
-      </script>
-    </body>
-    </html>
-    """, height=100)
+        # Save as PNG using imgkit
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as f:
+            try:
+                imgkit.from_string(styled_html, f.name)
+                with open(f.name, "rb") as img_file:
+                    st.download_button(
+                        label="📷 Download Image (PNG)",
+                        data=img_file,
+                        file_name=f"performance_table_{datetime.now().strftime('%Y%m%d')}.png",
+                        mime="image/png"
+                    )
+            except Exception as e:
+                st.error(f"Image generation failed: {e}")
