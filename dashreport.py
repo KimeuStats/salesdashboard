@@ -356,6 +356,8 @@ AgGrid(
 
 # === Excel Download ===
 import openpyxl
+from openpyxl.styles import PatternFill
+from openpyxl.formatting.rule import CellIsRule
 
 df_excel = df_display.copy()
 
@@ -373,11 +375,29 @@ with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
     worksheet = writer.sheets['Performance']
     
     header = list(df_excel.columns)
+    
+    # Define fills for conditional formatting
+    fill_negative = PatternFill(start_color='FFC0CB', end_color='FFC0CB', fill_type='solid')  # pink
+    fill_positive = PatternFill(start_color='D0F0C0', end_color='D0F0C0', fill_type='solid')  # light green
+
     for col_name in percent_cols:
         if col_name in header:
-            col_idx = header.index(col_name) + 1
+            col_idx = header.index(col_name) + 1  # Excel columns are 1-based
+            
+            # Format cells as percentage with 1 decimal place
             for row in range(2, len(df_excel) + 2):
                 worksheet.cell(row=row, column=col_idx).number_format = '0.0%'
+            
+            # Add conditional formatting for negative values (< 0)
+            worksheet.conditional_formatting.add(
+                f"{openpyxl.utils.get_column_letter(col_idx)}2:{openpyxl.utils.get_column_letter(col_idx)}{len(df_excel) + 1}",
+                CellIsRule(operator='lessThan', formula=['0'], fill=fill_negative)
+            )
+            # Add conditional formatting for positive values (> 0)
+            worksheet.conditional_formatting.add(
+                f"{openpyxl.utils.get_column_letter(col_idx)}2:{openpyxl.utils.get_column_letter(col_idx)}{len(df_excel) + 1}",
+                CellIsRule(operator='greaterThan', formula=['0'], fill=fill_positive)
+            )
 
 excel_buffer.seek(0)
 
