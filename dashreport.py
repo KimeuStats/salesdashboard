@@ -5,10 +5,10 @@ import plotly.graph_objs as go
 import base64
 import requests
 
-# === PAGE CONFIG ===
+# ========== PAGE CONFIG ==========
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
-# === STYLES ===
+# ========== STYLES ==========
 st.markdown("""
     <style>
         .main .block-container {
@@ -48,7 +48,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# === LOGO ===
+# ========== LOGO ==========
 def load_base64_image_from_url(url):
     response = requests.get(url)
     if response.status_code == 200:
@@ -68,8 +68,9 @@ if logo_base64:
 else:
     st.error("⚠️ Failed to load logo image.")
 
-# === LOAD DATA ===
+# ========== LOAD DATA ==========
 file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
+
 try:
     sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
     targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
@@ -78,7 +79,7 @@ except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
 
-# === CLEAN DATA ===
+# ========== CLEAN DATA ==========
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
 targets.columns = targets.columns.str.lower()
 prev_year_sales.columns = prev_year_sales.columns.str.lower()
@@ -92,18 +93,18 @@ for df in [sales, targets, prev_year_sales]:
 targets_agg = targets.groupby(['branch', 'category1'], as_index=False)['amount'].sum()
 targets_agg.rename(columns={'amount': 'monthly_target'}, inplace=True)
 
-# === HELPER FUNCTION ===
-def working_days_excl_sundays(start_date, end_date):
-    return len([d for d in pd.date_range(start=start_date, end=end_date) if d.weekday() != 6])
+def working_days_excluding_sundays(start_date, end_date):
+    all_days = pd.date_range(start=start_date, end=end_date)
+    return len(all_days[all_days.dayofweek != 6])
 
-# === FILTERS ===
+# ========== FILTERS ==========
 clusters = sales["Cluster"].dropna().unique()
 branches = sales["branch"].dropna().unique()
 categories = sales["category1"].dropna().unique()
 date_min = sales["date"].min()
 date_max = sales["date"].max()
 
-col1, col2, col3, col4 = st.columns([1,1,1,2])
+col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
 with col1:
     selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
 with col2:
@@ -131,12 +132,12 @@ if start_date:
 if end_date:
     filtered = filtered[filtered["date"] <= pd.to_datetime(end_date)]
 
-# === AGGREGATION ===
+# ========== AGGREGATION ==========
 end_dt = pd.to_datetime(end_date)
-days_passed = working_days_excl_sundays(start_date, end_date)
+days_passed = working_days_excluding_sundays(start_date, end_date)
 month_start = pd.Timestamp(end_dt.year, end_dt.month, 1)
 month_end = pd.Timestamp(end_dt.year, end_dt.month, end_dt.days_in_month)
-total_working_days = working_days_excl_sundays(month_start, month_end)
+total_working_days = working_days_excluding_sundays(month_start, month_end)
 
 mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
 daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
@@ -176,7 +177,7 @@ df.rename(columns={
     'cm_vs_pym': 'CM VS PYM'
 }, inplace=True)
 
-# === TOTALS ===
+# ========== TOTALS ==========
 total_vals = df[df['branch'] != 'Totals'].copy()
 def safe_sum(col): return total_vals[col].sum()
 def safe_div(n, d): return n / d if d != 0 else 0
@@ -200,7 +201,7 @@ total_row = {
 
 df = pd.concat([df[df['branch'] != 'Totals'], pd.DataFrame([total_row])], ignore_index=True)
 
-# === FORMAT ===
+# ========== FORMAT ==========
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 for col in percent_cols:
     df[col] = (df[col].astype(float) * 100).round(1).astype(str) + '%'
@@ -211,7 +212,7 @@ desired_order = [
 ]
 df = df[desired_order]
 
-# === CHART ===
+# ========== CHART ==========
 st.markdown("### 📊 Sales vs Monthly Target (MTD)")
 df_chart = df[df['branch'] != 'Totals'].copy()
 x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
@@ -226,12 +227,11 @@ fig.update_layout(
     height=500,
     margin=dict(b=150),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    # Remove all modebar buttons except download
-    modebar_remove=['zoom', 'pan', 'select', 'lasso2d', 'resetScale2d', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian']
+    modebar_remove=['zoom', 'pan', 'select', 'lasso2d', 'resetScale2d']
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# === STYLED TABLE ===
+# ========== STYLED TABLE ==========
 format_dict = {
     'Monthly TGT': "{:,.1f}",
     'Daily Tgt': "{:,.1f}",
@@ -244,46 +244,15 @@ format_dict = {
 }
 
 def highlight_comparisons(val):
-    try:
-        if isinstance(val, str) and val.endswith('%'):
-            numeric_val = float(val.strip('%'))
-            if numeric_val < 0:
-                return 'background-color: #ffc0cb; color: black; font-weight: bold;'
-            elif numeric_val > 0:
-                return 'background-color: #d0f0c0; color: black;'
-    except:
-        pass
     return ''
 
 def highlight_totals(row):
     return ['background-color: #b2dfdb; font-weight: bold; font-size:16px; border: 2px solid #00796b'] * len(row) if row['branch'] == 'Totals' else [''] * len(row)
 
 styled_df = df.style.format(format_dict)\
-    .map(highlight_comparisons, subset=percent_cols)\
-    .apply(highlight_totals, axis=1)\
-    .set_table_styles([
-        {'selector': 'thead th', 'props': [('background-color', '#b2dfdb'), ('color', 'black'),
-                                           ('font-weight', 'bold'), ('text-align', 'center'),
-                                           ('font-size', '13px'), ('border', '1px solid #999'),
-                                           ('white-space', 'nowrap'), ('padding', '5px')]},
-        {'selector': 'td', 'props': [('text-align', 'center'), ('font-size', '13px'),
-                                     ('white-space', 'nowrap'), ('padding', '5px')]}
     ])
 
+# Scrollable Table Container
 st.markdown("<div class='scrollable-table-container'>", unsafe_allow_html=True)
 st.markdown(styled_df.to_html(), unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
-
-# === DOWNLOAD TABLE DATA ===
-def convert_df_to_csv(df):
-    return df.to_csv(index=False).encode('utf-8')
-
-csv_data = convert_df_to_csv(df)
-
-st.download_button(
-    label="Download Table as CSV",
-    data=csv_data,
-    file_name='sales_dashboard.csv',
-    mime='text/csv',
-    key='download-csv'
-)
