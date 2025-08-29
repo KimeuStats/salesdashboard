@@ -3,6 +3,5 @@ pandas
 numpy
 plotly
 openpyxl
-st-aggrid
-xlsxwriter
 requests
+streamlit-aggrid
