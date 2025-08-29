@@ -238,7 +238,23 @@ st.plotly_chart(fig, use_container_width=True)
 
 # === Prepare dataframe for AgGrid ===
 df_display = df.copy()
-df_display["is_totals"] = df_display["branch"] == "Totals"
+
+# Calculate totals for numeric columns (sum for relevant cols, avg for percentages maybe)
+totals_dict = {}
+
+for col in df_display.columns:
+    if col in ['branch', 'category1']:
+        totals_dict[col] = 'Totals'
+    elif col in ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']:
+        # For percent columns, you can put empty or average, here empty for clarity
+        totals_dict[col] = np.nan
+    elif np.issubdtype(df_display[col].dtype, np.number):
+        totals_dict[col] = df_display[col].sum()
+    else:
+        totals_dict[col] = ''
+
+# Append totals row to dataframe
+df_display = df_display.append(totals_dict, ignore_index=True)
 
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
@@ -248,19 +264,10 @@ gb = GridOptionsBuilder.from_dataframe(df_display)
 # Enable sorting, filtering, resizable columns
 gb.configure_default_column(filter=True, sortable=True, resizable=True)
 
-# Keep the 'is_totals' column visible, but style it differently
-gb.configure_column(
-    "is_totals",
-    cellStyle=JsCode("""
-        function(params) {
-            return {'backgroundColor': '#ffe0b2', 'fontWeight': 'bold'};
-        }
-    """)
-)
-
 # Conditional formatting for % columns (color based on value)
 cell_style_jscode = JsCode("""
 function(params) {
+    if (params.value == null || params.value === '') return {};
     if (params.value < 0) {
         return {color: 'black', backgroundColor: '#ffc0cb', fontWeight: 'bold'};
     } else if (params.value > 0) {
@@ -278,24 +285,23 @@ for col in percent_cols:
         valueFormatter="(x * 100).toFixed(1) + '%'"
     )
 
-# Round all other numeric columns to 1 decimal place
-import numpy as np
+# Round other numeric columns to 1 decimal place
 numeric_cols = df_display.select_dtypes(include=[np.number]).columns.difference(percent_cols).tolist()
 for col in numeric_cols:
     gb.configure_column(
         col,
         type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-        valueFormatter="Number(x).toFixed(1)"
+        valueFormatter="x == null ? '' : Number(x).toFixed(1)"
     )
 
-# Style the Totals row (background color and font weight)
+# Style the totals row - different background color, bold font
 totals_row_style = JsCode("""
 function(params) {
-    if (params.data.is_totals) {
+    if (params.node.rowIndex === params.api.getDisplayedRowCount() - 1) {
         return {
             'backgroundColor': '#b2dfdb',
             'fontWeight': 'bold',
-            'fontSize': '16px'
+            'fontSize': '14px'
         }
     }
     return {};
@@ -304,7 +310,7 @@ function(params) {
 
 gb.configure_grid_options(getRowStyle=totals_row_style)
 
-# === Add CSS for full cell borders and header background color ===
+# === Add CSS for borders and column header background ===
 st.markdown("""
 <style>
 .ag-theme-material .ag-root-wrapper, 
@@ -339,7 +345,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # === Render the grid ===
-st.markdown("PERFOMANCE TABLE")
+st.markdown("""
+    <h3 style="
+        text-align: center; 
+        font-weight: bold; 
+        color: #1976d2;  /* Blue color */
+        font-size: 28px;
+        margin-bottom: 10px;
+    ">
+        📋 PERFORMANCE TABLE
+    </h3>
+""", unsafe_allow_html=True)
+
 AgGrid(
     df_display,
     gridOptions=gb.build(),
@@ -350,7 +367,6 @@ AgGrid(
     domLayout='autoHeight',
     enableCellTextSelection=True
 )
-
 
 
 # === DOWNLOAD ===
