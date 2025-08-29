@@ -5,7 +5,7 @@ import plotly.graph_objs as go
 import base64
 import requests
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
-
+import streamlit.components.v1 as components
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
@@ -241,23 +241,31 @@ st.plotly_chart(fig, use_container_width=True)
 # === Prepare dataframe for AgGrid ===
 df_display = df.copy()
 
-# Calculate column totals for numeric columns only (excluding 'branch' and 'category1')
+# Calculate totals using safe division
+def safe_div(numerator, denominator):
+    return (numerator - denominator) / denominator if denominator != 0 else 0
+
+# Create totals row dict
 totals_dict = {col: df[col].sum() if pd.api.types.is_numeric_dtype(df[col]) else '' for col in df.columns}
 totals_dict['branch'] = 'Totals'
 totals_dict['category1'] = ''
 
-# Append totals row with concat (append is deprecated)
-df_display = pd.concat([df_display, pd.DataFrame([totals_dict])], ignore_index=True)
+# Recalculate percentage fields based on totals
+totals_dict['Achieved vs Daily Tgt'] = safe_div(totals_dict['Daily Achieved'], totals_dict['Daily Tgt'])
+totals_dict['MTD Var'] = safe_div(totals_dict['MTD Act.'], totals_dict['MTD TGT'])
+totals_dict['Achieved VS Monthly tgt'] = safe_div(totals_dict['MTD Act.'], totals_dict['Monthly TGT'])
+totals_dict['CM VS PYM'] = safe_div(totals_dict['CM'], totals_dict['PYM'])
 
-# Mark totals row for styling
+# Add totals row
+df_display = pd.concat([df_display, pd.DataFrame([totals_dict])], ignore_index=True)
 df_display['is_totals'] = df_display['branch'] == 'Totals'
 
+# Columns to treat as percentages
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-# Round numeric columns to 1 decimal place, convert % cols to percent values
+# Round numeric values and convert % columns
 for col in df_display.columns:
     if col in percent_cols:
-        # Convert fraction to percentage and round
         df_display[col] = (df_display[col] * 100).round(1)
     elif pd.api.types.is_numeric_dtype(df_display[col]):
         df_display[col] = df_display[col].round(1)
@@ -265,10 +273,7 @@ for col in df_display.columns:
 # === Build GridOptions ===
 gb = GridOptionsBuilder.from_dataframe(df_display)
 
-# Enable sorting, filtering, resizable columns but disable auto column fit
 gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
-
-# Hide the helper column
 gb.configure_column("is_totals", hide=True)
 
 # Conditional formatting for % columns
@@ -293,7 +298,7 @@ for col in percent_cols:
         headerClass='header-center'
     )
 
-# Style totals row with distinct background and bold font
+# Style totals row
 totals_row_style = JsCode("""
 function(params) {
     if (params.data.is_totals) {
@@ -310,7 +315,7 @@ function(params) {
 
 gb.configure_grid_options(getRowStyle=totals_row_style)
 
-# Add some extra styling for headers & cell borders via CSS
+# === Custom CSS ===
 custom_css = """
 .ag-theme-material .ag-header-cell-label {
     justify-content: center !important;
@@ -329,8 +334,8 @@ custom_css = """
 
 st.markdown(f"<style>{custom_css}</style>", unsafe_allow_html=True)
 
-# Render the grid
-st.markdown("### <center>📋 PERFORMANCE TABLE</center>", unsafe_allow_html=True)
+# === Render the grid ===
+st.markdown("### <center>📋 <span style='color:#7b38d8; font-weight:bold;'>PERFORMANCE TABLE</span></center>", unsafe_allow_html=True)
 
 AgGrid(
     df_display,
@@ -339,12 +344,40 @@ AgGrid(
     allow_unsafe_jscode=True,
     theme="material",
     height=500,
-    fit_columns_on_grid_load=False,  # Disable auto-fit to keep content size
+    fit_columns_on_grid_load=False,
     reload_data=True
 )
 
-
-
-# === DOWNLOAD ===
+# === DOWNLOAD CSV ===
 csv_data = df.to_csv(index=False).encode('utf-8')
-st.download_button("Download Table as CSV", data=csv_data, file_name='sales_dashboard.csv', mime='text/csv')
+col1, col2 = st.columns(2)
+with col1:
+    st.download_button("📥 Download Table as CSV", data=csv_data, file_name='sales_dashboard.csv', mime='text/csv')
+
+# === DOWNLOAD IMAGE BUTTON (experimental) ===
+with col2:
+    st.markdown("### ")
+    st.markdown("⬇️ **Download as Image** (screenshot table below)")
+
+    components.html("""
+    <html>
+    <head>
+      <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    </head>
+    <body>
+      <button onclick="downloadImage()" style="padding: 10px 20px; font-weight: bold; background-color: #7b38d8; color: white; border: none; border-radius: 5px;">
+        📸 Screenshot Table
+      </button>
+      <script>
+        function downloadImage() {
+          html2canvas(document.querySelector('.main')).then(canvas => {
+            var link = document.createElement('a');
+            link.download = 'table_screenshot.png';
+            link.href = canvas.toDataURL();
+            link.click();
+          });
+        }
+      </script>
+    </body>
+    </html>
+    """, height=100)
