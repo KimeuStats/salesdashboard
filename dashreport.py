@@ -248,8 +248,15 @@ gb = GridOptionsBuilder.from_dataframe(df_display)
 # Enable sorting, filtering, resizable columns
 gb.configure_default_column(filter=True, sortable=True, resizable=True)
 
-# Hide the helper column
-gb.configure_column("is_totals", hide=True)
+# Keep the 'is_totals' column visible, but style it differently
+gb.configure_column(
+    "is_totals",
+    cellStyle=JsCode("""
+        function(params) {
+            return {'backgroundColor': '#ffe0b2', 'fontWeight': 'bold'};
+        }
+    """)
+)
 
 # Conditional formatting for % columns (color based on value)
 cell_style_jscode = JsCode("""
@@ -297,7 +304,7 @@ function(params) {
 
 gb.configure_grid_options(getRowStyle=totals_row_style)
 
-# === Add CSS for full cell borders ===
+# === Add CSS for full cell borders and header background color ===
 st.markdown("""
 <style>
 .ag-theme-material .ag-root-wrapper, 
@@ -306,31 +313,33 @@ st.markdown("""
 .ag-theme-material .ag-row, 
 .ag-theme-material .ag-cell, 
 .ag-theme-material .ag-header-cell {
-    border: 1px solid #ddd !important;
-}
-
-.ag-theme-material .ag-cell {
-    border-right: 1px solid #ddd !important;
-    border-bottom: 1px solid #ddd !important;
+    border: 1px solid #999 !important;
+    box-sizing: border-box;
 }
 
 .ag-theme-material .ag-header-cell {
-    border-right: 1px solid #bbb !important;
-    border-bottom: 1px solid #bbb !important;
+    background-color: #1976d2 !important;  /* Blue header bg */
+    color: white !important;  /* White text */
+    font-weight: bold;
+}
+
+.ag-theme-material .ag-cell {
+    border-right: 1px solid #999 !important;
+    border-bottom: 1px solid #999 !important;
 }
 
 .ag-theme-material .ag-row:last-child .ag-cell {
-    border-bottom: 1px solid #ddd !important;
+    border-bottom: 1px solid #999 !important;
 }
 
 .ag-theme-material .ag-header-row {
-    border-bottom: 1px solid #bbb !important;
+    border-bottom: 1px solid #999 !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # === Render the grid ===
-st.markdown("### 📋 Sales Summary Table (Interactive with Conditional Formatting)")
+st.markdown("PERFOMANCE TABLE")
 AgGrid(
     df_display,
     gridOptions=gb.build(),
@@ -338,9 +347,10 @@ AgGrid(
     allow_unsafe_jscode=True,
     theme="material",
     height=500,
-    domLayout='autoHeight',  # keep height auto for content fit
+    domLayout='autoHeight',
     enableCellTextSelection=True
 )
+
 
 
 # === DOWNLOAD ===
