@@ -236,6 +236,9 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
+import numpy as np
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+
 # === Prepare dataframe for AgGrid ===
 df_display = df.copy()
 
@@ -345,18 +348,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # === Render the grid ===
-st.markdown("""
-    <h3 style="
-        text-align: center; 
-        font-weight: bold; 
-        color: #1976d2;  /* Blue color */
-        font-size: 28px;
-        margin-bottom: 10px;
-    ">
-        📋 PERFORMANCE TABLE
-    </h3>
-""", unsafe_allow_html=True)
-
+st.markdown("### 📋 PERFOMANCE TABLE")
 AgGrid(
     df_display,
     gridOptions=gb.build(),
