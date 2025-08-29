@@ -341,21 +341,22 @@ AgGrid(
     reload_data=True
 )
 
-# === DOWNLOAD BUTTON ===
 
 
-# Prepare Excel download
+# Prepare Excel download from df_display (which includes totals row)
 excel_buffer = io.BytesIO()
 with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-    df.to_excel(writer, index=False, sheet_name='Performance')
+    df_display.drop(columns=['is_totals'], errors='ignore').to_excel(
+        writer, index=False, sheet_name='Performance'
+    )
 
-excel_buffer.seek(0)  # Move pointer to the beginning
+excel_buffer.seek(0)  # Reset buffer position
 
-# Download as Excel
+# Streamlit download button
 st.download_button(
     label="📥 Download Table as Excel",
     data=excel_buffer,
-    file_name="sales_dashboard.xlsx",
+    file_name="sales_dashboard_with_totals.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
