@@ -287,6 +287,21 @@ function(params) {
 
 gb.configure_grid_options(getRowStyle=totals_row_style)
 
+# === Add CSS for cell borders ===
+st.markdown("""
+<style>
+    /* Add borders around cells and headers */
+    .ag-theme-material .ag-cell, 
+    .ag-theme-material .ag-header-cell {
+        border: 1px solid #ccc !important;
+    }
+    /* Optional: add hover highlight for rows */
+    .ag-theme-material .ag-row-hover {
+        background-color: #f1f1f1 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # === Render the grid ===
 st.markdown("### 📋 Sales Summary Table (Interactive with Conditional Formatting)")
 AgGrid(
@@ -296,8 +311,11 @@ AgGrid(
     allow_unsafe_jscode=True,
     theme="material",
     height=500,
-    fit_columns_on_grid_load=True
+    fit_columns_on_grid_load=True,
+    domLayout='autoHeight',               # auto height for grid
+    enableCellTextSelection=True          # allow selecting/copying text in cells
 )
+
 
 # === DOWNLOAD ===
 csv_data = df.to_csv(index=False).encode('utf-8')
