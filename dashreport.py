@@ -236,47 +236,51 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-import numpy as np
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+
 
 # === Prepare dataframe for AgGrid ===
 df_display = df.copy()
 
-# Calculate totals for numeric columns (sum for relevant cols, avg for percentages maybe)
-totals_dict = {}
+# Calculate column totals for numeric columns only (excluding 'branch' and 'category1')
+totals_dict = {col: df[col].sum() if pd.api.types.is_numeric_dtype(df[col]) else '' for col in df.columns}
+totals_dict['branch'] = 'Totals'
+totals_dict['category1'] = ''
 
-for col in df_display.columns:
-    if col in ['branch', 'category1']:
-        totals_dict[col] = 'Totals'
-    elif col in ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']:
-        # For percent columns, you can put empty or average, here empty for clarity
-        totals_dict[col] = np.nan
-    elif np.issubdtype(df_display[col].dtype, np.number):
-        totals_dict[col] = df_display[col].sum()
-    else:
-        totals_dict[col] = ''
+# Append totals row with concat (append is deprecated)
+df_display = pd.concat([df_display, pd.DataFrame([totals_dict])], ignore_index=True)
 
-# Append totals row to dataframe
-df_display = df_display.append(totals_dict, ignore_index=True)
+# Mark totals row for styling
+df_display['is_totals'] = df_display['branch'] == 'Totals'
 
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
+
+# Round numeric columns to 1 decimal place, convert % cols to percent values
+for col in df_display.columns:
+    if col in percent_cols:
+        # Convert fraction to percentage and round
+        df_display[col] = (df_display[col] * 100).round(1)
+    elif pd.api.types.is_numeric_dtype(df_display[col]):
+        df_display[col] = df_display[col].round(1)
 
 # === Build GridOptions ===
 gb = GridOptionsBuilder.from_dataframe(df_display)
 
-# Enable sorting, filtering, resizable columns
-gb.configure_default_column(filter=True, sortable=True, resizable=True)
+# Enable sorting, filtering, resizable columns but disable auto column fit
+gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
 
-# Conditional formatting for % columns (color based on value)
+# Hide the helper column
+gb.configure_column("is_totals", hide=True)
+
+# Conditional formatting for % columns
 cell_style_jscode = JsCode("""
 function(params) {
-    if (params.value == null || params.value === '') return {};
+    if (params.value == null) return {};
     if (params.value < 0) {
-        return {color: 'black', backgroundColor: '#ffc0cb', fontWeight: 'bold'};
+        return {color: 'black', backgroundColor: '#ffc0cb', fontWeight: 'bold', textAlign: 'center'};
     } else if (params.value > 0) {
-        return {color: 'black', backgroundColor: '#d0f0c0'};
+        return {color: 'black', backgroundColor: '#d0f0c0', textAlign: 'center'};
     }
-    return {};
+    return {textAlign: 'center'};
 }
 """)
 
@@ -285,26 +289,19 @@ for col in percent_cols:
         col,
         cellStyle=cell_style_jscode,
         type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-        valueFormatter="(x * 100).toFixed(1) + '%'"
+        valueFormatter="x.toFixed(1) + '%'",
+        headerClass='header-center'
     )
 
-# Round other numeric columns to 1 decimal place
-numeric_cols = df_display.select_dtypes(include=[np.number]).columns.difference(percent_cols).tolist()
-for col in numeric_cols:
-    gb.configure_column(
-        col,
-        type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-        valueFormatter="x == null ? '' : Number(x).toFixed(1)"
-    )
-
-# Style the totals row - different background color, bold font
+# Style totals row with distinct background and bold font
 totals_row_style = JsCode("""
 function(params) {
-    if (params.node.rowIndex === params.api.getDisplayedRowCount() - 1) {
+    if (params.data.is_totals) {
         return {
             'backgroundColor': '#b2dfdb',
             'fontWeight': 'bold',
-            'fontSize': '14px'
+            'fontSize': '14px',
+            'textAlign': 'center'
         }
     }
     return {};
@@ -313,42 +310,28 @@ function(params) {
 
 gb.configure_grid_options(getRowStyle=totals_row_style)
 
-# === Add CSS for borders and column header background ===
-st.markdown("""
-<style>
-.ag-theme-material .ag-root-wrapper, 
-.ag-theme-material .ag-header, 
-.ag-theme-material .ag-body-viewport, 
-.ag-theme-material .ag-row, 
-.ag-theme-material .ag-cell, 
-.ag-theme-material .ag-header-cell {
-    border: 1px solid #999 !important;
-    box-sizing: border-box;
+# Add some extra styling for headers & cell borders via CSS
+custom_css = """
+.ag-theme-material .ag-header-cell-label {
+    justify-content: center !important;
+    font-weight: bold !important;
+    background-color: #d3d3d3 !important;
+    color: #222222 !important;
 }
-
-.ag-theme-material .ag-header-cell {
-    background-color: #1976d2 !important;  /* Blue header bg */
-    color: white !important;  /* White text */
-    font-weight: bold;
-}
-
 .ag-theme-material .ag-cell {
-    border-right: 1px solid #999 !important;
-    border-bottom: 1px solid #999 !important;
+    border: 1px solid #ccc !important;
+    text-align: center !important;
 }
-
-.ag-theme-material .ag-row:last-child .ag-cell {
-    border-bottom: 1px solid #999 !important;
+.ag-theme-material .ag-row {
+    border-bottom: 1px solid #ccc !important;
 }
+"""
 
-.ag-theme-material .ag-header-row {
-    border-bottom: 1px solid #999 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+st.markdown(f"<style>{custom_css}</style>", unsafe_allow_html=True)
 
-# === Render the grid ===
-st.markdown("### 📋 PERFOMANCE TABLE")
+# Render the grid
+st.markdown("### <center>📋 PERFORMANCE TABLE</center>", unsafe_allow_html=True)
+
 AgGrid(
     df_display,
     gridOptions=gb.build(),
@@ -356,9 +339,10 @@ AgGrid(
     allow_unsafe_jscode=True,
     theme="material",
     height=500,
-    domLayout='autoHeight',
-    enableCellTextSelection=True
+    fit_columns_on_grid_load=False,  # Disable auto-fit to keep content size
+    reload_data=True
 )
+
 
 
 # === DOWNLOAD ===
