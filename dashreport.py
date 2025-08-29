@@ -297,4 +297,5 @@ if not filtered.empty:
     )
 
 else:
+    
     st.warning("No data found for the selected filters or date range.")
