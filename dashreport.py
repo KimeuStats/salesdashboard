@@ -229,20 +229,68 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# === STYLED TABLE ===
+# === FORMATTING LOGIC ===
+
+# Format percentage columns
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 for col in percent_cols:
-    df[col] = (df[col].astype(float) * 100).round(1).astype(str) + '%'
+    df[col] = df[col].astype(str).str.replace('%', '')  # clean any pre-formatting
+    df[col] = df[col].astype(float)
 
-desired_order = [
-    "branch", "category1", "Monthly TGT", "Daily Tgt", "Daily Achieved", "Achieved vs Daily Tgt",
-    "MTD TGT", "MTD Act.", "MTD Var", "CM", "Achieved VS Monthly tgt", "Projected landing", "PYM", "CM VS PYM"
-]
-df = df[desired_order]
+# Save a version for interactive table (as you asked)
+df_display = df.copy()
+for col in percent_cols:
+    df_display[col] = df_display[col].round(1).astype(str) + '%'
 
+# === FORMATTING HELPERS ===
+def highlight_comparisons(val):
+    if isinstance(val, float):
+        if val < 0:
+            return 'background-color: #ffc0cb; color: black; font-weight: bold;'
+        elif val > 0:
+            return 'background-color: #d0f0c0; color: black;'
+    return ''
+
+def highlight_totals(row):
+    if row['branch'] == 'Totals':
+        return ['background-color: #b2dfdb; font-weight: bold; font-size:16px; border: 2px solid #00796b'] * len(row)
+    return [''] * len(row)
+
+# === APPLY STYLES (non-sortable, pretty preview) ===
+styled_df = df.style\
+    .applymap(highlight_comparisons, subset=percent_cols)\
+    .apply(highlight_totals, axis=1)\
+    .set_table_styles([
+        {'selector': 'thead th', 'props': [('background-color', '#b2dfdb'), ('color', 'black'),
+                                           ('font-weight', 'bold'), ('text-align', 'center'),
+                                           ('font-size', '13px'), ('border', '1px solid #999'),
+                                           ('white-space', 'nowrap'), ('padding', '5px')]},
+        {'selector': 'td', 'props': [('text-align', 'center'), ('font-size', '13px'),
+                                     ('white-space', 'nowrap'), ('padding', '5px')]}
+    ])\
+    .format({
+        'Monthly TGT': "{:,.1f}",
+        'Daily Tgt': "{:,.1f}",
+        'Daily Achieved': "{:,.1f}",
+        'MTD TGT': "{:,.1f}",
+        'MTD Act.': "{:,.1f}",
+        'CM': "{:,.1f}",
+        'Projected landing': "{:,.1f}",
+        'PYM': "{:,.1f}",
+        'Achieved vs Daily Tgt': "{:.1f}%",
+        'MTD Var': "{:.1f}%",
+        'Achieved VS Monthly tgt': "{:.1f}%",
+        'CM VS PYM': "{:.1f}%"
+    })
+
+st.markdown("#### 📋 Styled Summary Table")
 st.markdown("<div class='scrollable-table-container'>", unsafe_allow_html=True)
-st.dataframe(df, use_container_width=True)
+st.markdown(styled_df.to_html(), unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
+
+# === INTERACTIVE VERSION ===
+st.markdown("#### 🧮 Interactive Table (Sortable & Filterable)")
+st.dataframe(df_display, use_container_width=True)
 
 # === DOWNLOAD ===
 csv_data = df.to_csv(index=False).encode('utf-8')
