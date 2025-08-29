@@ -244,24 +244,21 @@ st.plotly_chart(fig, use_container_width=True)
 # === Prepare dataframe for AgGrid ===
 df_display = df.copy()
 
-# Columns to include in row total (exclude % fields)
+# Columns used in % calculations
+percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 numeric_cols_to_sum = [
     'Monthly TGT', 'Daily Tgt', 'Daily Achieved',
     'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM'
 ]
-percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-# Add row-wise 'Total' column
-df_display['Total'] = df_display[numeric_cols_to_sum].sum(axis=1)
-
-# Create totals row
+# --- Create totals row ---
 totals_dict = {
     col: df[col].sum() if col in numeric_cols_to_sum else '' for col in df.columns
 }
 totals_dict['branch'] = 'Totals'
 totals_dict['category1'] = ''
 
-# Recalculate percentage columns using totals (not sum of percentages)
+# Recalculate percentages in totals row using base totals
 def safe_div(n, d):
     return (n - d) / d if d != 0 else 0
 
@@ -270,21 +267,18 @@ totals_dict['MTD Var'] = safe_div(totals_dict['MTD Act.'], totals_dict['MTD TGT'
 totals_dict['Achieved VS Monthly tgt'] = safe_div(totals_dict['MTD Act.'], totals_dict['Monthly TGT'])
 totals_dict['CM VS PYM'] = safe_div(totals_dict['CM'], totals_dict['PYM'])
 
-# Calculate 'Total' column for totals row
-totals_dict['Total'] = sum(totals_dict[col] for col in numeric_cols_to_sum)
-
 # Append totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals_dict])], ignore_index=True)
 df_display['is_totals'] = df_display['branch'] == 'Totals'
 
-# Round values
+# --- Round values for display ---
 for col in df_display.columns:
     if col in percent_cols:
         df_display[col] = (df_display[col].astype(float) * 100).round(1)
     elif pd.api.types.is_numeric_dtype(df_display[col]):
         df_display[col] = df_display[col].round(1)
 
-# === Grid Options ===
+# === Configure AgGrid ===
 gb = GridOptionsBuilder.from_dataframe(df_display)
 gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
 gb.configure_column("is_totals", hide=True)
@@ -311,7 +305,7 @@ for col in percent_cols:
         headerClass='header-center'
     )
 
-# Totals row style
+# Totals row styling
 totals_row_style = JsCode("""
 function(params) {
     if (params.data.is_totals) {
@@ -325,9 +319,10 @@ function(params) {
     return {};
 }
 """)
+
 gb.configure_grid_options(getRowStyle=totals_row_style)
 
-# === Custom Table Styling ===
+# === Custom CSS for Grid ===
 custom_css = """
 .ag-theme-material .ag-header-cell-label {
     justify-content: center !important;
@@ -359,7 +354,7 @@ AgGrid(
     reload_data=True
 )
 
-# === Excel Export ===
+# === Excel Download ===
 excel_buffer = io.BytesIO()
 with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
     df_display.drop(columns=['is_totals'], errors='ignore').to_excel(
@@ -367,10 +362,10 @@ with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
     )
 excel_buffer.seek(0)
 
-# === Download Button ===
 st.download_button(
     label="📥 Download Table as Excel",
     data=excel_buffer,
     file_name="sales_dashboard_with_totals.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
