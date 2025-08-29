@@ -46,6 +46,12 @@ st.markdown("""
             font-weight: bold;
             margin: 0;
         }
+        /* Color column headers background */
+        .ag-theme-material .ag-header {
+            background-color: #7b38d8 !important;
+            color: white !important;
+            font-weight: bold !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -234,11 +240,7 @@ st.plotly_chart(fig, use_container_width=True)
 df_display = df.copy()
 df_display["is_totals"] = df_display["branch"] == "Totals"
 
-# Clean % columns (convert from string to float)
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
-for col in percent_cols:
-    # Remove '%' sign and convert to float
-    df_display[col] = df_display[col].str.replace('%', '').astype(float)
 
 # === Build GridOptions ===
 gb = GridOptionsBuilder.from_dataframe(df_display)
@@ -266,7 +268,7 @@ for col in percent_cols:
         col,
         cellStyle=cell_style_jscode,
         type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-        valueFormatter="x.toFixed(1) + '%'"
+        valueFormatter="(x * 100).toFixed(1) + '%'"
     )
 
 # Style the Totals row (background color and font weight)
@@ -296,7 +298,6 @@ AgGrid(
     height=500,
     fit_columns_on_grid_load=True
 )
-
 
 # === DOWNLOAD ===
 csv_data = df.to_csv(index=False).encode('utf-8')
