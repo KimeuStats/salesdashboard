@@ -341,33 +341,22 @@ AgGrid(
     reload_data=True
 )
 
-# === DOWNLOAD BUTTONS ===
-import io
+# === DOWNLOAD BUTTON ===
+
 
 # Prepare Excel download
 excel_buffer = io.BytesIO()
-with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
     df.to_excel(writer, index=False, sheet_name='Performance')
-    writer.save()
-excel_data = excel_buffer.getvalue()
 
-col1, col2 = st.columns(2)
+excel_buffer.seek(0)  # Move pointer to the beginning
 
-# CSV Download
-with col1:
-    st.download_button(
-        "📥 Download Table as CSV",
-        data=csv_data,
-        file_name='sales_dashboard.csv',
-        mime='text/csv'
-    )
+# Download as Excel
+st.download_button(
+    label="📥 Download Table as Excel",
+    data=excel_buffer,
+    file_name="sales_dashboard.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
-# Excel Download
-with col2:
-    st.download_button(
-        "📥 Download Table as Excel",
-        data=excel_data,
-        file_name='sales_dashboard.xlsx',
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
 
