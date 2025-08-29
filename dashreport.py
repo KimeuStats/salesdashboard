@@ -162,36 +162,41 @@ if filtered.empty:
     st.dataframe(empty_df)
     st.stop()
 
-# === AGGREGATIONS ===
+# AGGREGATION (UPDATED FROM WORKING VERSION)
 end_dt = pd.to_datetime(end_date)
-days_passed = working_days_excl_sundays(start_date, end_date)
+days_passed = working_days_excluding_sundays(start_date, end_date)
 month_start = pd.Timestamp(end_dt.year, end_dt.month, 1)
 month_end = pd.Timestamp(end_dt.year, end_dt.month, end_dt.days_in_month)
-total_working_days = working_days_excl_sundays(month_start, month_end)
+total_working_days = working_days_excluding_sundays(month_start, month_end)
 
+# Current MTD and Daily Sales
 mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
 daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
 
+# Previous year same month
 prev_year_filtered = prev_year_sales[
     (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
     (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
 ]
 pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
 
+# Merge all dataframes
 df = mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left') \
             .merge(targets_agg, on=['branch', 'category1'], how='left') \
             .merge(pym_agg, on=['branch', 'category1'], how='left')
 df.fillna(0, inplace=True)
 
+# Calculations
 df['daily_tgt'] = df['monthly_target'] / total_working_days
 df['achieved_vs_daily_tgt'] = np.where(df['daily_tgt'] == 0, 0, (df['daily_achieved'] - df['daily_tgt']) / df['daily_tgt'])
 df['mtd_tgt'] = df['daily_tgt'] * days_passed
 df['mtd_var'] = np.where(df['mtd_tgt'] == 0, 0, (df['mtd_achieved'] - df['mtd_tgt']) / df['mtd_tgt'])
 df['cm'] = df['mtd_achieved']
-df['achieved_vs_monthly_tgt'] = np.where(df['monthly_target'] == 0, 0, (df['mtd_achieved'] - df['monthly_target']) / df['monthly_target'])
+df['Achieved VS Monthly tgt'] = np.where(df['monthly_target'] == 0, 0, (df['mtd_achieved'] - df['monthly_target']) / df['monthly_target'])
 df['projected_landing'] = np.where(days_passed == 0, 0, (df['mtd_achieved'] / days_passed) * total_working_days)
 df['cm_vs_pym'] = np.where(df['pym'] == 0, 0, (df['cm'] - df['pym']) / df['pym'])
 
+# Rename columns
 df.rename(columns={
     'monthly_target': 'Monthly TGT',
     'daily_tgt': 'Daily Tgt',
@@ -207,17 +212,43 @@ df.rename(columns={
     'cm_vs_pym': 'CM VS PYM'
 }, inplace=True)
 
-# === KPI CARDS ===
-kpi1 = df['MTD Act.'].sum()
-kpi2 = df['Monthly TGT'].sum()
-kpi3 = df['Daily Achieved'].sum()
-kpi4 = df['Projected landing'].sum()
+# Totals row
+total_vals = df[df['branch'] != 'Totals'].copy()
+def safe_sum(col): return total_vals[col].sum()
+def safe_div(n, d): return n / d if d != 0 else 0
 
-colA, colB, colC, colD = st.columns(4)
-colA.metric("💰 MTD Achieved", f"{kpi1:,.0f}")
-colB.metric("🎯 Monthly Target", f"{kpi2:,.0f}")
-colC.metric("📅 Daily Achieved", f"{kpi3:,.0f}")
-colD.metric("📈 Projected Landing", f"{kpi4:,.0f}")
+total_row = {
+    "branch": "Totals",
+    "category1": "",
+    "Monthly TGT": safe_sum('Monthly TGT'),
+    "Daily Tgt": safe_sum('Daily Tgt'),
+    "Daily Achieved": safe_sum('Daily Achieved'),
+    "Achieved vs Daily Tgt": safe_div(safe_sum('Daily Achieved') - safe_sum('Daily Tgt'), safe_sum('Daily Tgt')),
+    "MTD TGT": safe_sum('MTD TGT'),
+    "MTD Act.": safe_sum('MTD Act.'),
+    "MTD Var": safe_div(safe_sum('MTD Act.') - safe_sum('MTD TGT'), safe_sum('MTD TGT')),
+    "CM": safe_sum('CM'),
+    "Achieved VS Monthly tgt": safe_div(safe_sum('MTD Act.'), safe_sum('Monthly TGT')),
+    "Projected landing": safe_sum('Projected landing'),
+    "PYM": safe_sum('PYM'),
+    "CM VS PYM": safe_div(safe_sum('CM') - safe_sum('PYM'), safe_sum('PYM'))
+}
+
+# Append totals row
+df = pd.concat([df[df['branch'] != 'Totals'], pd.DataFrame([total_row])], ignore_index=True)
+
+# Format percent columns
+percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
+for col in percent_cols:
+    df[col] = (df[col].astype(float) * 100).round(1).astype(str) + '%'
+
+# Final column order
+desired_order = [
+    "branch", "category1", "Monthly TGT", "Daily Tgt", "Daily Achieved", "Achieved vs Daily Tgt",
+    "MTD TGT", "MTD Act.", "MTD Var", "CM", "Achieved VS Monthly tgt", "Projected landing", "PYM", "CM VS PYM"
+]
+df = df[desired_order]
+
 
 # === CHART ===
 st.markdown("### 📊 Sales vs Monthly Target (MTD)")
