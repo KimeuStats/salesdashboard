@@ -5,4 +5,5 @@ plotly
 openpyxl
 requests
 streamlit-aggrid
-
+imgkit
+wkhtmltopdf
