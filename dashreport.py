@@ -271,10 +271,10 @@ totals_dict['CM VS PYM'] = safe_div(totals_dict['CM'], totals_dict['PYM'])
 df_display = pd.concat([df_display, pd.DataFrame([totals_dict])], ignore_index=True)
 df_display['is_totals'] = df_display['branch'] == 'Totals'
 
-# --- Round values for display ---
+# --- Round values for display in the app ---
 for col in df_display.columns:
     if col in percent_cols:
-        df_display[col] = (df_display[col].astype(float) * 100).round(1)
+        df_display[col] = (df_display[col].astype(float) * 100).round(1)  # percentages shown as 0-100 scale in app
     elif pd.api.types.is_numeric_dtype(df_display[col]):
         df_display[col] = df_display[col].round(1)
 
@@ -355,11 +355,30 @@ AgGrid(
 )
 
 # === Excel Download ===
+import openpyxl
+
+df_excel = df_display.copy()
+
+# Drop 'is_totals' and '::auto_unique_id::' if present
+df_excel = df_excel.drop(columns=['is_totals', '::auto_unique_id::'], errors='ignore')
+
+# Convert percentage columns back to decimal for Excel formatting
+for col in percent_cols:
+    df_excel[col] = df_excel[col] / 100
+
 excel_buffer = io.BytesIO()
 with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-    df_display.drop(columns=['is_totals'], errors='ignore').to_excel(
-        writer, index=False, sheet_name='Performance'
-    )
+    df_excel.to_excel(writer, index=False, sheet_name='Performance')
+    workbook = writer.book
+    worksheet = writer.sheets['Performance']
+    
+    header = list(df_excel.columns)
+    for col_name in percent_cols:
+        if col_name in header:
+            col_idx = header.index(col_name) + 1
+            for row in range(2, len(df_excel) + 2):
+                worksheet.cell(row=row, column=col_idx).number_format = '0.0%'
+
 excel_buffer.seek(0)
 
 st.download_button(
@@ -368,4 +387,3 @@ st.download_button(
     file_name="sales_dashboard_with_totals.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
-
