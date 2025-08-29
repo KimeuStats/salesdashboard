@@ -7,7 +7,7 @@ import requests
 import io
 from datetime import datetime
 
-# Try optional import for table-to-image export
+# Attempt to import dataframe_image for table image export
 try:
     import dataframe_image as dfi
     HAS_DFI = True
@@ -17,37 +17,18 @@ except ModuleNotFoundError:
 # ========== PAGE CONFIG ==========
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
-# ========== STYLES ==========
+# ========== CUSTOM STYLES ==========
 st.markdown("""
-    <style>
-        .main .block-container {
-            max-width: 1400px;
-            padding: 2rem 2rem;
-            margin: auto;
-        }
-        .table-scroll-area {
-            overflow-x: auto;
-            border: 1px solid #ccc;
-            padding: 10px;
-        }
-        .kpi {
-            background-color: #f0f0f0;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .kpi h3 {
-            margin: 0;
-        }
-        .kpi p {
-            margin: 5px 0 0;
-            font-size: 24px;
-            font-weight: bold;
-        }
-    </style>
+<style>
+    .main .block-container { max-width: 1400px; padding: 2rem; margin: auto; }
+    .table-scroll-area { overflow-x: auto; border: 1px solid #ccc; padding: 10px; }
+    .kpi { background-color: #f0f0f0; padding: 15px; border-radius: 8px; text-align: center; }
+    .kpi h3 { margin: 0; }
+    .kpi p { margin: 5px 0 0; font-size: 24px; font-weight: bold; }
+</style>
 """, unsafe_allow_html=True)
 
-# ========== LOGO ==========
+# ========== LOGO HEADER ==========
 def load_base64_image_from_url(url):
     resp = requests.get(url)
     return base64.b64encode(resp.content).decode() if resp.status_code == 200 else None
@@ -57,10 +38,10 @@ logo_b64 = load_base64_image_from_url(
 )
 if logo_b64:
     st.markdown(f"""
-        <div style="display:flex; align-items:center; margin-bottom:20px;">
-            <img src="data:image/png;base64,{logo_b64}" style="height:60px; margin-right:15px;" />
-            <h1 style="margin:0;">Muthokinju Paints Sales Dashboard</h1>
-        </div>
+    <div style="display:flex; align-items:center; margin-bottom:20px;">
+        <img src="data:image/png;base64,{logo_b64}" style="height:60px; margin-right:15px;" />
+        <h1 style="margin:0;">Muthokinju Paints Sales Dashboard</h1>
+    </div>
     """, unsafe_allow_html=True)
 else:
     st.error("⚠️ Failed to load logo.")
@@ -75,12 +56,12 @@ except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
 
-# ========== ENSURE AMOUNT CLEANING ==========
+# ========== CLEAN AMOUNT COLUMNS IF PRESENT ==========
 for df in (sales, targets, prev_year_sales):
     if 'amount' in df.columns:
         df['amount'] = df['amount'].astype(str).str.replace(',', '').astype(float)
 
-# ========== LABEL FORMATTING ==========
+# ========== STANDARDIZE COLUMN NAMES & DATES ==========
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
 targets.columns = targets.columns.str.lower()
 prev_year_sales.columns = prev_year_sales.columns.str.lower()
@@ -88,14 +69,14 @@ prev_year_sales.columns = prev_year_sales.columns.str.lower()
 sales['date'] = pd.to_datetime(sales['date'])
 prev_year_sales['date'] = pd.to_datetime(prev_year_sales['date'])
 
-# ========== TARGETS AGGREGATION ==========
+# ========== AGGREGATE TARGETS ==========
 targets_agg = targets.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
 
-# ========== HELPER: WORKING DAYS ==========
+# ========== HELPER: WORKING DAYS EXCLUDING SUNDAYS ==========
 def working_days_excl_sundays(start_date, end_date):
     return len(pd.date_range(start=start_date, end=end_date)[lambda d: d.dayofweek != 6])
 
-# ========== FILTERS ==========
+# ========== FILTER UI ==========
 clusters = sales['Cluster'].dropna().unique().tolist()
 branches = sales['branch'].dropna().unique().tolist()
 categories = sales['category1'].dropna().unique().tolist()
@@ -103,21 +84,20 @@ categories = sales['category1'].dropna().unique().tolist()
 default_start = datetime(2024, 1, 1)
 default_end = datetime.today()
 
-col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
-with col1:
+c1, c2, c3, c4 = st.columns([1,1,1,2])
+with c1:
     sel_cluster = st.selectbox("Cluster", ["All"] + clusters)
-with col2:
+with c2:
     sel_branch = st.selectbox("Branch", ["All"] + branches)
-with col3:
+with c3:
     sel_category = st.selectbox("Category", ["All"] + categories)
-with col4:
+with c4:
     date_range = st.date_input("Date Range", value=(default_start, default_end),
                                min_value=default_start, max_value=default_end)
 
 if not (isinstance(date_range, tuple) and len(date_range) == 2):
     st.error("Please select a valid start and end date.")
     st.stop()
-
 start_date, end_date = date_range
 
 # ========== FILTER DATA ==========
@@ -130,30 +110,33 @@ if sel_category != "All":
     filtered = filtered[filtered["category1"] == sel_category]
 filtered = filtered[(filtered["date"] >= pd.to_datetime(start_date)) & (filtered["date"] <= pd.to_datetime(end_date))]
 
-# ========== CALCULATE DAYS ==========
-month_start = pd.Timestamp(end_date.year, end_date.month, 1)
-month_end = pd.Timestamp(end_date.year, end_date.month, end_date.days_in_month)
+# ========== CALCULATE WORK DAYS ==========
+end_ts = pd.Timestamp(end_date)
+month_start = pd.Timestamp(end_ts.year, end_ts.month, 1)
+month_end = pd.Timestamp(end_ts.year, end_ts.month, end_ts.days_in_month)
+
 work_days_in_month = working_days_excl_sundays(month_start, month_end)
 work_days_done = working_days_excl_sundays(start_date, end_date)
 
-# ========== AGGREGATE METRICS ==========
+# ========== AGGREGATE SALES METRICS ==========
 if not filtered.empty:
-    end_dt = pd.to_datetime(end_date)
     days_passed = working_days_excl_sundays(start_date, end_date)
-    total_wd = working_days_excl_sundays(month_start, month_end)
+    total_wd = work_days_in_month
 
     mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+    daily_achieved = filtered[filtered['date'] == end_ts].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
 
     prev_year_filtered = prev_year_sales[
-        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
-        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+        (prev_year_sales['date'] >= pd.Timestamp(end_ts.year - 1, end_ts.month, 1)) &
+        (prev_year_sales['date'] <= pd.Timestamp(end_ts.year - 1, end_ts.month, end_ts.days_in_month))
     ]
     pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
 
-    df = mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left') \
-                .merge(targets_agg, on=['branch', 'category1'], how='left') \
-                .merge(pym_agg, on=['branch', 'category1'], how='left')
+    df = (
+      mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left')
+      .merge(targets_agg, on=['branch', 'category1'], how='left')
+      .merge(pym_agg, on=['branch', 'category1'], how='left')
+    )
     df.fillna(0, inplace=True)
 
     df['daily_tgt'] = df['monthly_target'] / total_wd
@@ -179,34 +162,32 @@ if not filtered.empty:
         'cm_vs_pym': 'CM VS PYM'
     }, inplace=True)
 
-    # Totals row
     total_vals = df[df['branch'] != 'Totals']
     tot = {
-        'branch': 'Totals', 'category1': '',
-        'Monthly TGT': total_vals['Monthly TGT'].sum(),
-        'Daily Tgt': total_vals['Daily Tgt'].sum(),
-        'Daily Achieved': total_vals['Daily Achieved'].sum(),
-        'Achieved vs Daily Tgt': (total_vals['Daily Achieved'].sum() - total_vals['Daily Tgt'].sum()) / total_vals['Daily Tgt'].sum() if total_vals['Daily Tgt'].sum() else 0,
-        'MTD TGT': total_vals['MTD TGT'].sum(),
-        'MTD Act.': total_vals['MTD Act.'].sum(),
-        'MTD Var': (total_vals['MTD Act.'].sum() - total_vals['MTD TGT'].sum()) / total_vals['MTD TGT'].sum() if total_vals['MTD TGT'].sum() else 0,
-        'CM': total_vals['CM'].sum(),
-        'Achieved VS Monthly tgt': total_vals['MTD Act.'].sum() / total_vals['Monthly TGT'].sum() if total_vals['Monthly TGT'].sum() else 0,
-        'Projected landing': total_vals['Projected landing'].sum(),
-        'PYM': total_vals['PYM'].sum(),
-        'CM VS PYM': (total_vals['CM'].sum() - total_vals['PYM'].sum()) / total_vals['PYM'].sum() if total_vals['PYM'].sum() else 0,
+      'branch': 'Totals', 'category1': '',
+      'Monthly TGT': total_vals['Monthly TGT'].sum(),
+      'Daily Tgt': total_vals['Daily Tgt'].sum(),
+      'Daily Achieved': total_vals['Daily Achieved'].sum(),
+      'Achieved vs Daily Tgt': ((total_vals['Daily Achieved'].sum() - total_vals['Daily Tgt'].sum()) / total_vals['Daily Tgt'].sum()) if total_vals['Daily Tgt'].sum() else 0,
+      'MTD TGT': total_vals['MTD TGT'].sum(),
+      'MTD Act.': total_vals['MTD Act.'].sum(),
+      'MTD Var': ((total_vals['MTD Act.'].sum() - total_vals['MTD TGT'].sum()) / total_vals['MTD TGT'].sum()) if total_vals['MTD TGT'].sum() else 0,
+      'CM': total_vals['CM'].sum(),
+      'Achieved VS Monthly tgt': (total_vals['MTD Act.'].sum() / total_vals['Monthly TGT'].sum()) if total_vals['Monthly TGT'].sum() else 0,
+      'Projected landing': total_vals['Projected landing'].sum(),
+      'PYM': total_vals['PYM'].sum(),
+      'CM VS PYM': ((total_vals['CM'].sum() - total_vals['PYM'].sum()) / total_vals['PYM'].sum()) if total_vals['PYM'].sum() else 0,
     }
     df = pd.concat([df[df['branch'] != 'Totals'], pd.DataFrame([tot])], ignore_index=True)
 
     for col in ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']:
         df[col] = (df[col].astype(float) * 100).round(1).astype(str) + '%'
 
-    order = [
+    desired_order = [
         "branch", "category1", "Monthly TGT", "Daily Tgt", "Daily Achieved", "Achieved vs Daily Tgt",
         "MTD TGT", "MTD Act.", "MTD Var", "CM", "Achieved VS Monthly tgt", "Projected landing", "PYM", "CM VS PYM"
     ]
-    df = df[order]
-
+    df = df[desired_order]
 else:
     df = pd.DataFrame()
 
@@ -222,9 +203,9 @@ st.markdown("### Sales vs Monthly Target (MTD)")
 fig = go.Figure()
 if not df.empty:
     chart_df = df[df['branch'] != 'Totals']
-    x_lbls = chart_df.apply(lambda r: f"{r['branch']} - {r['category1']}", axis=1)
-    fig.add_trace(go.Bar(x=x_lbls, y=chart_df['MTD Act.'], name='MTD Achieved', marker_color='orange'))
-    fig.add_trace(go.Bar(x=x_lbls, y=chart_df['Monthly TGT'], name='Monthly Target', marker_color='steelblue'))
+    xlabels = chart_df.apply(lambda r: f"{r['branch']} - {r['category1']}", axis=1)
+    fig.add_trace(go.Bar(x=xlabels, y=chart_df['MTD Act.'], name='MTD Achieved', marker_color='orange'))
+    fig.add_trace(go.Bar(x=xlabels, y=chart_df['Monthly TGT'], name='Monthly Target', marker_color='steelblue'))
 fig.update_layout(barmode='group', xaxis_tickangle=-45, height=500, margin=dict(b=150),
                   legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1))
 
@@ -240,11 +221,8 @@ st.markdown("### Data Table")
 with st.container():
     st.markdown('<div class="table-scroll-area">', unsafe_allow_html=True)
     if not df.empty:
-        st.write(df.style.format({
-            'Monthly TGT': "{:,.1f}", 'Daily Tgt': "{:,.1f}", 'Daily Achieved': "{:,.1f}",
-            'MTD TGT': "{:,.1f}", 'MTD Act.': "{:,.1f}", 'CM': "{:,.1f}",
-            'Projected landing': "{:,.1f}", 'PYM': "{:,.1f}"
-        }))
+        st.write(df.style.format({col: "{:,.1f}" for col in [
+            'Monthly TGT', 'Daily Tgt', 'Daily Achieved', 'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM']}))
     else:
         st.write("No records to display for the selected filters.")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -260,6 +238,6 @@ with st.container():
     elif not HAS_DFI:
         st.info("Install `dataframe_image` to enable table image download.")
 
-# ========== NO DATA NOTICE ==========
+# ========== NO DATA WARNING ==========
 if df.empty:
     st.warning("No data found for the selected filters or date range.")
