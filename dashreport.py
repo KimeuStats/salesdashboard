@@ -272,6 +272,7 @@ for col in percent_cols:
     )
 
 # Round all other numeric columns to 1 decimal place
+import numpy as np
 numeric_cols = df_display.select_dtypes(include=[np.number]).columns.difference(percent_cols).tolist()
 for col in numeric_cols:
     gb.configure_column(
@@ -296,20 +297,35 @@ function(params) {
 
 gb.configure_grid_options(getRowStyle=totals_row_style)
 
-# === Add CSS for cell borders ===
+# === Add CSS for full cell borders ===
 st.markdown("""
 <style>
-    /* Stronger borders for cells and headers */
-    .ag-theme-material .ag-cell, 
-    .ag-theme-material .ag-header-cell,
-    .ag-theme-material .ag-cell-focus,
-    .ag-theme-material .ag-header-cell-label {
-        border: 1px solid #ccc !important;
-    }
-    /* Optional: row hover highlight */
-    .ag-theme-material .ag-row-hover {
-        background-color: #f1f1f1 !important;
-    }
+.ag-theme-material .ag-root-wrapper, 
+.ag-theme-material .ag-header, 
+.ag-theme-material .ag-body-viewport, 
+.ag-theme-material .ag-row, 
+.ag-theme-material .ag-cell, 
+.ag-theme-material .ag-header-cell {
+    border: 1px solid #ddd !important;
+}
+
+.ag-theme-material .ag-cell {
+    border-right: 1px solid #ddd !important;
+    border-bottom: 1px solid #ddd !important;
+}
+
+.ag-theme-material .ag-header-cell {
+    border-right: 1px solid #bbb !important;
+    border-bottom: 1px solid #bbb !important;
+}
+
+.ag-theme-material .ag-row:last-child .ag-cell {
+    border-bottom: 1px solid #ddd !important;
+}
+
+.ag-theme-material .ag-header-row {
+    border-bottom: 1px solid #bbb !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -322,11 +338,9 @@ AgGrid(
     allow_unsafe_jscode=True,
     theme="material",
     height=500,
-    fit_columns_on_grid_load=True,
-    domLayout='autoHeight',
+    domLayout='autoHeight',  # keep height auto for content fit
     enableCellTextSelection=True
 )
-
 
 
 # === DOWNLOAD ===
