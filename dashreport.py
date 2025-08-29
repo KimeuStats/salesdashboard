@@ -4,6 +4,7 @@ import numpy as np
 import plotly.graph_objs as go
 import base64
 import requests
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
@@ -229,68 +230,73 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# === FORMATTING LOGIC ===
+# === Prepare dataframe for AgGrid ===
+df_display = df.copy()
+df_display["is_totals"] = df_display["branch"] == "Totals"
 
-# Format percentage columns
+# Clean % columns (convert from string to float)
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 for col in percent_cols:
-    df[col] = df[col].astype(str).str.replace('%', '')  # clean any pre-formatting
-    df[col] = df[col].astype(float)
+    # Remove '%' sign and convert to float
+    df_display[col] = df_display[col].str.replace('%', '').astype(float)
 
-# Save a version for interactive table (as you asked)
-df_display = df.copy()
+# === Build GridOptions ===
+gb = GridOptionsBuilder.from_dataframe(df_display)
+
+# Enable sorting, filtering, resizable columns
+gb.configure_default_column(filter=True, sortable=True, resizable=True)
+
+# Hide the helper column
+gb.configure_column("is_totals", hide=True)
+
+# Conditional formatting for % columns (color based on value)
+cell_style_jscode = JsCode("""
+function(params) {
+    if (params.value < 0) {
+        return {color: 'black', backgroundColor: '#ffc0cb', fontWeight: 'bold'};
+    } else if (params.value > 0) {
+        return {color: 'black', backgroundColor: '#d0f0c0'};
+    }
+    return {};
+}
+""")
+
 for col in percent_cols:
-    df_display[col] = df_display[col].round(1).astype(str) + '%'
+    gb.configure_column(
+        col,
+        cellStyle=cell_style_jscode,
+        type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+        valueFormatter="x.toFixed(1) + '%'"
+    )
 
-# === FORMATTING HELPERS ===
-def highlight_comparisons(val):
-    if isinstance(val, float):
-        if val < 0:
-            return 'background-color: #ffc0cb; color: black; font-weight: bold;'
-        elif val > 0:
-            return 'background-color: #d0f0c0; color: black;'
-    return ''
+# Style the Totals row (background color and font weight)
+totals_row_style = JsCode("""
+function(params) {
+    if (params.data.is_totals) {
+        return {
+            'backgroundColor': '#b2dfdb',
+            'fontWeight': 'bold',
+            'fontSize': '16px'
+        }
+    }
+    return {};
+}
+""")
 
-def highlight_totals(row):
-    if row['branch'] == 'Totals':
-        return ['background-color: #b2dfdb; font-weight: bold; font-size:16px; border: 2px solid #00796b'] * len(row)
-    return [''] * len(row)
+gb.configure_grid_options(getRowStyle=totals_row_style)
 
-# === APPLY STYLES (non-sortable, pretty preview) ===
-styled_df = df.style\
-    .applymap(highlight_comparisons, subset=percent_cols)\
-    .apply(highlight_totals, axis=1)\
-    .set_table_styles([
-        {'selector': 'thead th', 'props': [('background-color', '#b2dfdb'), ('color', 'black'),
-                                           ('font-weight', 'bold'), ('text-align', 'center'),
-                                           ('font-size', '13px'), ('border', '1px solid #999'),
-                                           ('white-space', 'nowrap'), ('padding', '5px')]},
-        {'selector': 'td', 'props': [('text-align', 'center'), ('font-size', '13px'),
-                                     ('white-space', 'nowrap'), ('padding', '5px')]}
-    ])\
-    .format({
-        'Monthly TGT': "{:,.1f}",
-        'Daily Tgt': "{:,.1f}",
-        'Daily Achieved': "{:,.1f}",
-        'MTD TGT': "{:,.1f}",
-        'MTD Act.': "{:,.1f}",
-        'CM': "{:,.1f}",
-        'Projected landing': "{:,.1f}",
-        'PYM': "{:,.1f}",
-        'Achieved vs Daily Tgt': "{:.1f}%",
-        'MTD Var': "{:.1f}%",
-        'Achieved VS Monthly tgt': "{:.1f}%",
-        'CM VS PYM': "{:.1f}%"
-    })
+# === Render the grid ===
+st.markdown("### 📋 Sales Summary Table (Interactive with Conditional Formatting)")
+AgGrid(
+    df_display,
+    gridOptions=gb.build(),
+    enable_enterprise_modules=False,
+    allow_unsafe_jscode=True,
+    theme="material",
+    height=500,
+    fit_columns_on_grid_load=True
+)
 
-st.markdown("#### 📋 Styled Summary Table")
-st.markdown("<div class='scrollable-table-container'>", unsafe_allow_html=True)
-st.markdown(styled_df.to_html(), unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
-# === INTERACTIVE VERSION ===
-st.markdown("#### 🧮 Interactive Table (Sortable & Filterable)")
-st.dataframe(df_display, use_container_width=True)
 
 # === DOWNLOAD ===
 csv_data = df.to_csv(index=False).encode('utf-8')
