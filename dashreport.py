@@ -6,8 +6,13 @@ import base64
 import requests
 import io
 from datetime import datetime
-from PIL import Image
-import dataframe_image as dfi
+
+# Try optional import for table-to-image export
+try:
+    import dataframe_image as dfi
+    HAS_DFI = True
+except ModuleNotFoundError:
+    HAS_DFI = False
 
 # ========== PAGE CONFIG ==========
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
@@ -24,27 +29,6 @@ st.markdown("""
             overflow-x: auto;
             border: 1px solid #ccc;
             padding: 10px;
-        }
-        .banner {
-            width: 100%;
-            background-color: #3FA0A3;
-            padding: 3px 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
-        .banner img {
-            height: 52px;
-            margin-right: 15px;
-            border: 2px solid white;
-            box-shadow: 0 0 5px rgba(255,255,255,0.7);
-        }
-        .banner h1 {
-            color: white;
-            font-size: 26px;
-            font-weight: bold;
-            margin: 0;
         }
         .kpi {
             background-color: #f0f0f0;
@@ -65,130 +49,195 @@ st.markdown("""
 
 # ========== LOGO ==========
 def load_base64_image_from_url(url):
-    r = requests.get(url)
-    if r.status_code == 200:
-        return base64.b64encode(r.content).decode()
-    return None
+    resp = requests.get(url)
+    return base64.b64encode(resp.content).decode() if resp.status_code == 200 else None
 
-logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
-logo_b64 = load_base64_image_from_url(logo_url)
-
+logo_b64 = load_base64_image_from_url(
+    "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
+)
 if logo_b64:
     st.markdown(f"""
-        <div class="banner">
-            <img src="data:image/png;base64,{logo_b64}" alt="Logo" />
-            <h1>Muthokinju Paints Sales Dashboard</h1>
+        <div style="display:flex; align-items:center; margin-bottom:20px;">
+            <img src="data:image/png;base64,{logo_b64}" style="height:60px; margin-right:15px;" />
+            <h1 style="margin:0;">Muthokinju Paints Sales Dashboard</h1>
         </div>
     """, unsafe_allow_html=True)
 else:
-    st.error("⚠️ Failed to load logo image.")
+    st.error("⚠️ Failed to load logo.")
 
 # ========== LOAD DATA ==========
 file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
 try:
     sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
     targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
-    prev_year = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
+    prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
 
-# ========== PREP DATA ==========
-sales['date'] = pd.to_datetime(sales['date'])
-prev_year['date'] = pd.to_datetime(prev_year['date'])
-for df in (sales, targets, prev_year):
-    df['amount'] = df['amount'].astype(str).str.replace(',', '').astype(float)
+# ========== ENSURE AMOUNT CLEANING ==========
+for df in (sales, targets, prev_year_sales):
+    if 'amount' in df.columns:
+        df['amount'] = df['amount'].astype(str).str.replace(',', '').astype(float)
 
+# ========== LABEL FORMATTING ==========
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
 targets.columns = targets.columns.str.lower()
-prev_year.columns = prev_year.columns.str.lower()
+prev_year_sales.columns = prev_year_sales.columns.str.lower()
 
-targets_agg = targets.groupby(['branch', 'category1'])['amount'].sum().reset_index().rename(columns={'amount': 'Monthly Target'})
+sales['date'] = pd.to_datetime(sales['date'])
+prev_year_sales['date'] = pd.to_datetime(prev_year_sales['date'])
 
-# ========== WORKING DAYS FUNC ==========
-def working_days_ex_sund(start, end):
-    rng = pd.date_range(start=start, end=end)
-    return len(rng[rng.dayofweek != 6])
+# ========== TARGETS AGGREGATION ==========
+targets_agg = targets.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
+
+# ========== HELPER: WORKING DAYS ==========
+def working_days_excl_sundays(start_date, end_date):
+    return len(pd.date_range(start=start_date, end=end_date)[lambda d: d.dayofweek != 6])
 
 # ========== FILTERS ==========
-clusters = sales['Cluster'].dropna().unique()
-branches = sales['branch'].dropna().unique()
-categories = sales['category1'].dropna().unique()
+clusters = sales['Cluster'].dropna().unique().tolist()
+branches = sales['branch'].dropna().unique().tolist()
+categories = sales['category1'].dropna().unique().tolist()
+
 default_start = datetime(2024, 1, 1)
 default_end = datetime.today()
 
-c1, c2, c3, c4 = st.columns([1,1,1,2])
-with c1:
-    sel_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
-with c2:
-    sel_branch = st.selectbox("Branch", options=["All"] + list(branches))
-with c3:
-    sel_cat = st.selectbox("Category", options=["All"] + list(categories))
-with c4:
+col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
+with col1:
+    sel_cluster = st.selectbox("Cluster", ["All"] + clusters)
+with col2:
+    sel_branch = st.selectbox("Branch", ["All"] + branches)
+with col3:
+    sel_category = st.selectbox("Category", ["All"] + categories)
+with col4:
     date_range = st.date_input("Date Range", value=(default_start, default_end),
-                                min_value=default_start, max_value=default_end)
+                               min_value=default_start, max_value=default_end)
 
-if not (isinstance(date_range, tuple) and len(date_range)==2):
-    st.error("Please select a valid date range.")
+if not (isinstance(date_range, tuple) and len(date_range) == 2):
+    st.error("Please select a valid start and end date.")
     st.stop()
 
 start_date, end_date = date_range
+
+# ========== FILTER DATA ==========
 filtered = sales.copy()
-if sel_cluster!="All": filtered = filtered[filtered['Cluster']==sel_cluster]
-if sel_branch!="All": filtered = filtered[filtered['branch']==sel_branch]
-if sel_cat!="All": filtered = filtered[filtered['category1']==sel_cat]
-filtered = filtered[(filtered['date']>=pd.to_datetime(start_date)) & (filtered['date']<=pd.to_datetime(end_date))]
+if sel_cluster != "All":
+    filtered = filtered[filtered["Cluster"] == sel_cluster]
+if sel_branch != "All":
+    filtered = filtered[filtered["branch"] == sel_branch]
+if sel_category != "All":
+    filtered = filtered[filtered["category1"] == sel_category]
+filtered = filtered[(filtered["date"] >= pd.to_datetime(start_date)) & (filtered["date"] <= pd.to_datetime(end_date))]
 
-# ========== CALCULATE KPIs ==========
+# ========== CALCULATE DAYS ==========
 month_start = pd.Timestamp(end_date.year, end_date.month, 1)
-month_end = month_start + pd.offsets.MonthEnd(0)
-work_days_in_month = working_days_ex_sund(month_start, month_end)
-work_days_done = working_days_ex_sund(start_date, end_date)
+month_end = pd.Timestamp(end_date.year, end_date.month, end_date.days_in_month)
+work_days_in_month = working_days_excl_sundays(month_start, month_end)
+work_days_done = working_days_excl_sundays(start_date, end_date)
 
-# Prepare df and KPIs if data exists
+# ========== AGGREGATE METRICS ==========
 if not filtered.empty:
-    # Aggregations as before...
-    # [Processing omitted for brevity—same as before for df, totals, percentages]
-    # After df is computed:
-    total_mtd = filtered.groupby(['branch','category1'])['amount'].sum().sum()
-    total_mth_tgt = targets_agg['Monthly Target'].sum()
+    end_dt = pd.to_datetime(end_date)
+    days_passed = working_days_excl_sundays(start_date, end_date)
+    total_wd = working_days_excl_sundays(month_start, month_end)
+
+    mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+
+    prev_year_filtered = prev_year_sales[
+        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+    ]
+    pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+
+    df = mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left') \
+                .merge(targets_agg, on=['branch', 'category1'], how='left') \
+                .merge(pym_agg, on=['branch', 'category1'], how='left')
+    df.fillna(0, inplace=True)
+
+    df['daily_tgt'] = df['monthly_target'] / total_wd
+    df['achieved_vs_daily_tgt'] = np.where(df['daily_tgt'] == 0, 0, (df['daily_achieved'] - df['daily_tgt']) / df['daily_tgt'])
+    df['mtd_tgt'] = df['daily_tgt'] * days_passed
+    df['mtd_var'] = np.where(df['mtd_tgt'] == 0, 0, (df['mtd_achieved'] - df['mtd_tgt']) / df['mtd_tgt'])
+    df['cm'] = df['mtd_achieved']
+    df['achieved_vs_monthly_tgt'] = np.where(df['monthly_target'] == 0, 0, (df['mtd_achieved'] - df['monthly_target']) / df['monthly_target'])
+    df['projected_landing'] = np.where(days_passed == 0, 0, (df['mtd_achieved'] / days_passed) * total_wd)
+    df['cm_vs_pym'] = np.where(df['pym'] == 0, 0, (df['cm'] - df['pym']) / df['pym'])
+
+    df.rename(columns={
+        'monthly_target': 'Monthly TGT',
+        'daily_tgt': 'Daily Tgt',
+        'daily_achieved': 'Daily Achieved',
+        'mtd_tgt': 'MTD TGT',
+        'mtd_achieved': 'MTD Act.',
+        'mtd_var': 'MTD Var',
+        'cm': 'CM',
+        'achieved_vs_monthly_tgt': 'Achieved VS Monthly tgt',
+        'projected_landing': 'Projected landing',
+        'pym': 'PYM',
+        'cm_vs_pym': 'CM VS PYM'
+    }, inplace=True)
+
+    # Totals row
+    total_vals = df[df['branch'] != 'Totals']
+    tot = {
+        'branch': 'Totals', 'category1': '',
+        'Monthly TGT': total_vals['Monthly TGT'].sum(),
+        'Daily Tgt': total_vals['Daily Tgt'].sum(),
+        'Daily Achieved': total_vals['Daily Achieved'].sum(),
+        'Achieved vs Daily Tgt': (total_vals['Daily Achieved'].sum() - total_vals['Daily Tgt'].sum()) / total_vals['Daily Tgt'].sum() if total_vals['Daily Tgt'].sum() else 0,
+        'MTD TGT': total_vals['MTD TGT'].sum(),
+        'MTD Act.': total_vals['MTD Act.'].sum(),
+        'MTD Var': (total_vals['MTD Act.'].sum() - total_vals['MTD TGT'].sum()) / total_vals['MTD TGT'].sum() if total_vals['MTD TGT'].sum() else 0,
+        'CM': total_vals['CM'].sum(),
+        'Achieved VS Monthly tgt': total_vals['MTD Act.'].sum() / total_vals['Monthly TGT'].sum() if total_vals['Monthly TGT'].sum() else 0,
+        'Projected landing': total_vals['Projected landing'].sum(),
+        'PYM': total_vals['PYM'].sum(),
+        'CM VS PYM': (total_vals['CM'].sum() - total_vals['PYM'].sum()) / total_vals['PYM'].sum() if total_vals['PYM'].sum() else 0,
+    }
+    df = pd.concat([df[df['branch'] != 'Totals'], pd.DataFrame([tot])], ignore_index=True)
+
+    for col in ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']:
+        df[col] = (df[col].astype(float) * 100).round(1).astype(str) + '%'
+
+    order = [
+        "branch", "category1", "Monthly TGT", "Daily Tgt", "Daily Achieved", "Achieved vs Daily Tgt",
+        "MTD TGT", "MTD Act.", "MTD Var", "CM", "Achieved VS Monthly tgt", "Projected landing", "PYM", "CM VS PYM"
+    ]
+    df = df[order]
+
 else:
     df = pd.DataFrame()
-    total_mtd = 0
-    total_mth_tgt = 0
 
 # ========== KPI CARDS ==========
 k1, k2, k3, k4 = st.columns(4)
-with k1:
-    st.markdown(f'<div class="kpi"><h3>Work Days in Month</h3><p>{work_days_in_month}</p></div>', unsafe_allow_html=True)
-with k2:
-    st.markdown(f'<div class="kpi"><h3>Days Worked</h3><p>{work_days_done}</p></div>', unsafe_allow_html=True)
-with k3:
-    st.markdown(f'<div class="kpi"><h3>MTD Achieved</h3><p>{total_mtd:,.1f}</p></div>', unsafe_allow_html=True)
-with k4:
-    st.markdown(f'<div class="kpi"><h3>Monthly Target</h3><p>{total_mth_tgt:,.1f}</p></div>', unsafe_allow_html=True)
+k1.markdown(f'<div class="kpi"><h3>Work Days in Month</h3><p>{work_days_in_month}</p></div>', unsafe_allow_html=True)
+k2.markdown(f'<div class="kpi"><h3>Days Worked</h3><p>{work_days_done}</p></div>', unsafe_allow_html=True)
+k3.markdown(f'<div class="kpi"><h3>MTD Achieved</h3><p>{filtered["amount"].sum() if not filtered.empty else 0:,.1f}</p></div>', unsafe_allow_html=True)
+k4.markdown(f'<div class="kpi"><h3>Monthly Target</h3><p>{targets_agg["monthly_target"].sum():,.1f}</p></div>', unsafe_allow_html=True)
 
 # ========== CHART ==========
 st.markdown("### Sales vs Monthly Target (MTD)")
 fig = go.Figure()
 if not df.empty:
-    chart = df[df['branch']!='Totals']
-    xlbl = chart.apply(lambda r: f"{r['branch']} - {r['category1']}", axis=1)
-    fig.add_trace(go.Bar(x=xlbl, y=chart['MTD Act.'], name='MTD Achieved', marker_color='orange'))
-    fig.add_trace(go.Bar(x=xlbl, y=chart['Monthly TGT'], name='Monthly Target', marker_color='steelblue'))
+    chart_df = df[df['branch'] != 'Totals']
+    x_lbls = chart_df.apply(lambda r: f"{r['branch']} - {r['category1']}", axis=1)
+    fig.add_trace(go.Bar(x=x_lbls, y=chart_df['MTD Act.'], name='MTD Achieved', marker_color='orange'))
+    fig.add_trace(go.Bar(x=x_lbls, y=chart_df['Monthly TGT'], name='Monthly Target', marker_color='steelblue'))
 fig.update_layout(barmode='group', xaxis_tickangle=-45, height=500, margin=dict(b=150),
                   legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1))
+
 st.plotly_chart(fig, use_container_width=True, config={
-    "displayModeBar": True,
     "displaylogo": False,
-    "modeBarButtonsToRemove": ['zoom', 'pan', 'select2d', 'lasso2d', 'autoScale2d', 'resetScale2d'],
-    "modeBarButtonsToAdd": ['toImage']
+    "displayModeBar": True,
+    "modeBarButtonsToRemove": ["zoom", "pan", "select2d", "lasso2d", "autoScale2d", "resetScale2d"],
+    "modeBarButtonsToAdd": ["toImage"]
 })
 
 # ========== TABLE & DOWNLOADS ==========
 st.markdown("### Data Table")
-container = st.container()
-with container:
+with st.container():
     st.markdown('<div class="table-scroll-area">', unsafe_allow_html=True)
     if not df.empty:
         st.write(df.style.format({
@@ -197,18 +246,20 @@ with container:
             'Projected landing': "{:,.1f}", 'PYM': "{:,.1f}"
         }))
     else:
-        st.write("No records to display for this date range.")
+        st.write("No records to display for the selected filters.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # CSV Download
     csv_data = df.to_csv(index=False).encode('utf-8')
     st.download_button("Download CSV", data=csv_data, file_name="sales_data.csv", mime="text/csv")
 
-    # Image Download (PNG)
-    if not df.empty:
-        png_bytes = dfi.export(df, include_index=False)
-        st.download_button("Download Table as Image", data=png_bytes, file_name="sales_data.png", mime="image/png")
+    if HAS_DFI and not df.empty:
+        buf = io.BytesIO()
+        dfi.export(df, buf, table_conversion="matplotlib")
+        buf.seek(0)
+        st.download_button("Download Table as Image (PNG)", data=buf.read(), file_name="sales_data.png", mime="image/png")
+    elif not HAS_DFI:
+        st.info("Install `dataframe_image` to enable table image download.")
 
-# ========== NO DATA WARNING ==========
+# ========== NO DATA NOTICE ==========
 if df.empty:
     st.warning("No data found for the selected filters or date range.")
