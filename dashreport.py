@@ -103,22 +103,26 @@ categories = sales["category1"].dropna().unique()
 date_min = sales["date"].min()
 date_max = sales["date"].max()
 
-col1, col2, col3, col4 = st.columns([1,1,1,2])
+col1, col2, col3 = st.columns(3)
 with col1:
     selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
 with col2:
     selected_branch = st.selectbox("Branch", options=["All"] + list(branches))
 with col3:
     selected_category = st.selectbox("Category", options=["All"] + list(categories))
-with col4:
-    date_range = st.date_input("Date Range", value=(date_min, date_max), min_value=date_min, max_value=date_max)
 
-if isinstance(date_range, tuple) and len(date_range) == 2:
-    start_date, end_date = date_range
-else:
-    st.error("Please select both a start date and an end date.")
-    st.stop()
+# === CUSTOM DATE PICKERS ===
+col_from, col_to = st.columns(2)
 
+with col_from:
+    st.markdown("<div style='background-color:#7b38d8; color:white; padding:8px; font-weight:bold;'>From</div>", unsafe_allow_html=True)
+    start_date = st.date_input("", value=date_min, min_value=date_min, max_value=date_max, key="from_date")
+
+with col_to:
+    st.markdown("<div style='background-color:#7b38d8; color:white; padding:8px; font-weight:bold;'>To</div>", unsafe_allow_html=True)
+    end_date = st.date_input("", value=date_max, min_value=date_min, max_value=date_max, key="to_date")
+
+# === APPLY FILTERS ===
 filtered = sales.copy()
 if selected_cluster != "All":
     filtered = filtered[filtered["Cluster"] == selected_cluster]
@@ -126,12 +130,29 @@ if selected_branch != "All":
     filtered = filtered[filtered["branch"] == selected_branch]
 if selected_category != "All":
     filtered = filtered[filtered["category1"] == selected_category]
-if start_date:
-    filtered = filtered[filtered["date"] >= pd.to_datetime(start_date)]
-if end_date:
-    filtered = filtered[filtered["date"] <= pd.to_datetime(end_date)]
+filtered = filtered[(filtered["date"] >= pd.to_datetime(start_date)) & (filtered["date"] <= pd.to_datetime(end_date))]
 
-# === AGGREGATION ===
+# === HANDLE NO DATA ===
+if filtered.empty:
+    st.warning("⚠️ No sales data found for the selected filters or date range.")
+
+    fig = go.Figure()
+    fig.update_layout(title="No Data Available",
+                      xaxis_title="Branch - Category",
+                      yaxis_title="Amount",
+                      height=400,
+                      modebar_remove=["zoom", "pan", "select", "zoomIn", "zoomOut", "resetScale2d",
+                                      "autoScale2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian"])
+    st.plotly_chart(fig, use_container_width=True)
+
+    empty_df = pd.DataFrame(columns=[
+        "branch", "category1", "Monthly TGT", "Daily Tgt", "Daily Achieved", "Achieved vs Daily Tgt",
+        "MTD TGT", "MTD Act.", "MTD Var", "CM", "Achieved VS Monthly tgt", "Projected landing", "PYM", "CM VS PYM"
+    ])
+    st.dataframe(empty_df)
+    st.stop()
+
+# === AGGREGATIONS ===
 end_dt = pd.to_datetime(end_date)
 days_passed = working_days_excl_sundays(start_date, end_date)
 month_start = pd.Timestamp(end_dt.year, end_dt.month, 1)
@@ -157,7 +178,7 @@ df['achieved_vs_daily_tgt'] = np.where(df['daily_tgt'] == 0, 0, (df['daily_achie
 df['mtd_tgt'] = df['daily_tgt'] * days_passed
 df['mtd_var'] = np.where(df['mtd_tgt'] == 0, 0, (df['mtd_achieved'] - df['mtd_tgt']) / df['mtd_tgt'])
 df['cm'] = df['mtd_achieved']
-df['Achieved VS Monthly tgt'] = np.where(df['monthly_target'] == 0, 0, (df['mtd_achieved'] - df['monthly_target']) / df['monthly_target'])
+df['achieved_vs_monthly_tgt'] = np.where(df['monthly_target'] == 0, 0, (df['mtd_achieved'] - df['monthly_target']) / df['monthly_target'])
 df['projected_landing'] = np.where(days_passed == 0, 0, (df['mtd_achieved'] / days_passed) * total_working_days)
 df['cm_vs_pym'] = np.where(df['pym'] == 0, 0, (df['cm'] - df['pym']) / df['pym'])
 
@@ -176,44 +197,21 @@ df.rename(columns={
     'cm_vs_pym': 'CM VS PYM'
 }, inplace=True)
 
-# === TOTALS ===
-total_vals = df[df['branch'] != 'Totals'].copy()
-def safe_sum(col): return total_vals[col].sum()
-def safe_div(n, d): return n / d if d != 0 else 0
+# === KPI CARDS ===
+kpi1 = df['MTD Act.'].sum()
+kpi2 = df['Monthly TGT'].sum()
+kpi3 = df['Daily Achieved'].sum()
+kpi4 = df['Projected landing'].sum()
 
-total_row = {
-    "branch": "Totals",
-    "category1": "",
-    "Monthly TGT": safe_sum('Monthly TGT'),
-    "Daily Tgt": safe_sum('Daily Tgt'),
-    "Daily Achieved": safe_sum('Daily Achieved'),
-    "Achieved vs Daily Tgt": safe_div(safe_sum('Daily Achieved') - safe_sum('Daily Tgt'), safe_sum('Daily Tgt')),
-    "MTD TGT": safe_sum('MTD TGT'),
-    "MTD Act.": safe_sum('MTD Act.'),
-    "MTD Var": safe_div(safe_sum('MTD Act.') - safe_sum('MTD TGT'), safe_sum('MTD TGT')),
-    "CM": safe_sum('CM'),
-    "Achieved VS Monthly tgt": safe_div(safe_sum('MTD Act.'), safe_sum('Monthly TGT')),
-    "Projected landing": safe_sum('Projected landing'),
-    "PYM": safe_sum('PYM'),
-    "CM VS PYM": safe_div(safe_sum('CM') - safe_sum('PYM'), safe_sum('PYM'))
-}
-
-df = pd.concat([df[df['branch'] != 'Totals'], pd.DataFrame([total_row])], ignore_index=True)
-
-# === FORMAT ===
-percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
-for col in percent_cols:
-    df[col] = (df[col].astype(float) * 100).round(1).astype(str) + '%'
-
-desired_order = [
-    "branch", "category1", "Monthly TGT", "Daily Tgt", "Daily Achieved", "Achieved vs Daily Tgt",
-    "MTD TGT", "MTD Act.", "MTD Var", "CM", "Achieved VS Monthly tgt", "Projected landing", "PYM", "CM VS PYM"
-]
-df = df[desired_order]
+colA, colB, colC, colD = st.columns(4)
+colA.metric("💰 MTD Achieved", f"{kpi1:,.0f}")
+colB.metric("🎯 Monthly Target", f"{kpi2:,.0f}")
+colC.metric("📅 Daily Achieved", f"{kpi3:,.0f}")
+colD.metric("📈 Projected Landing", f"{kpi4:,.0f}")
 
 # === CHART ===
 st.markdown("### 📊 Sales vs Monthly Target (MTD)")
-df_chart = df[df['branch'] != 'Totals'].copy()
+df_chart = df.copy()
 x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
 
 fig = go.Figure()
@@ -226,64 +224,26 @@ fig.update_layout(
     height=500,
     margin=dict(b=150),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    # Remove all modebar buttons except download
-    modebar_remove=['zoom', 'pan', 'select', 'lasso2d', 'resetScale2d', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian']
+    modebar_remove=["zoom", "pan", "select", "zoomIn", "zoomOut", "resetScale2d", "autoScale2d", 
+                    "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian"]
 )
 st.plotly_chart(fig, use_container_width=True)
 
 # === STYLED TABLE ===
-format_dict = {
-    'Monthly TGT': "{:,.1f}",
-    'Daily Tgt': "{:,.1f}",
-    'Daily Achieved': "{:,.1f}",
-    'MTD TGT': "{:,.1f}",
-    'MTD Act.': "{:,.1f}",
-    'CM': "{:,.1f}",
-    'Projected landing': "{:,.1f}",
-    'PYM': "{:,.1f}"
-}
+percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
+for col in percent_cols:
+    df[col] = (df[col].astype(float) * 100).round(1).astype(str) + '%'
 
-def highlight_comparisons(val):
-    try:
-        if isinstance(val, str) and val.endswith('%'):
-            numeric_val = float(val.strip('%'))
-            if numeric_val < 0:
-                return 'background-color: #ffc0cb; color: black; font-weight: bold;'
-            elif numeric_val > 0:
-                return 'background-color: #d0f0c0; color: black;'
-    except:
-        pass
-    return ''
-
-def highlight_totals(row):
-    return ['background-color: #b2dfdb; font-weight: bold; font-size:16px; border: 2px solid #00796b'] * len(row) if row['branch'] == 'Totals' else [''] * len(row)
-
-styled_df = df.style.format(format_dict)\
-    .map(highlight_comparisons, subset=percent_cols)\
-    .apply(highlight_totals, axis=1)\
-    .set_table_styles([
-        {'selector': 'thead th', 'props': [('background-color', '#b2dfdb'), ('color', 'black'),
-                                           ('font-weight', 'bold'), ('text-align', 'center'),
-                                           ('font-size', '13px'), ('border', '1px solid #999'),
-                                           ('white-space', 'nowrap'), ('padding', '5px')]},
-        {'selector': 'td', 'props': [('text-align', 'center'), ('font-size', '13px'),
-                                     ('white-space', 'nowrap'), ('padding', '5px')]}
-    ])
+desired_order = [
+    "branch", "category1", "Monthly TGT", "Daily Tgt", "Daily Achieved", "Achieved vs Daily Tgt",
+    "MTD TGT", "MTD Act.", "MTD Var", "CM", "Achieved VS Monthly tgt", "Projected landing", "PYM", "CM VS PYM"
+]
+df = df[desired_order]
 
 st.markdown("<div class='scrollable-table-container'>", unsafe_allow_html=True)
-st.markdown(styled_df.to_html(), unsafe_allow_html=True)
+st.dataframe(df, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# === DOWNLOAD TABLE DATA ===
-def convert_df_to_csv(df):
-    return df.to_csv(index=False).encode('utf-8')
-
-csv_data = convert_df_to_csv(df)
-
-st.download_button(
-    label="Download Table as CSV",
-    data=csv_data,
-    file_name='sales_dashboard.csv',
-    mime='text/csv',
-    key='download-csv'
-)
+# === DOWNLOAD ===
+csv_data = df.to_csv(index=False).encode('utf-8')
+st.download_button("Download Table as CSV", data=csv_data, file_name='sales_dashboard.csv', mime='text/csv')
