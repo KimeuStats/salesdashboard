@@ -180,18 +180,78 @@ df.rename(columns={
     'cm_vs_pym': 'CM VS PYM'
 }, inplace=True)
 
-# === KPI CARDS INCLUDING DAYS WORKED ===
+# === KPI CALCULATIONS ===
 kpi1 = df['MTD Act.'].sum()
 kpi2 = df['Monthly TGT'].sum()
 kpi3 = df['Daily Achieved'].sum()
 kpi4 = df['Projected landing'].sum()
+days_worked = working_days_excl_sundays(month_start, end_dt)
+total_working_days = working_days_excl_sundays(month_start, month_end)
 
-colA, colB, colC, colD, colE = st.columns(5)
-colA.metric("💰 MTD Achieved", f"{kpi1:,.0f}")
-colB.metric("🎯 Monthly Target", f"{kpi2:,.0f}")
-colC.metric("📅 Daily Achieved", f"{kpi3:,.0f}")
-colD.metric("📈 Projected Landing", f"{kpi4:,.0f}")
-colE.metric("💼 Days Worked", f"{days_worked} / {total_working_days}")
+# === STYLES ===
+st.markdown("""
+<style>
+.kpi-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 10px;
+    justify-content: space-between;
+}
+.kpi-box {
+    flex: 1 1 calc(20% - 16px);
+    background-color: #f7f7fb;
+    border-left: 6px solid #7b38d8;
+    border-radius: 10px;
+    padding: 16px;
+    min-width: 150px;
+    box-shadow: 1px 1px 4px rgba(0,0,0,0.05);
+}
+.kpi-box h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #555;
+    font-weight: 600;
+}
+.kpi-box p {
+    margin: 5px 0 0 0;
+    font-size: 22px;
+    font-weight: bold;
+    color: #222;
+}
+@media only screen and (max-width: 768px) {
+    .kpi-box {
+        flex: 1 1 calc(48% - 16px);
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# === KPI DISPLAY ===
+st.markdown(f"""
+<div class="kpi-grid">
+    <div class="kpi-box">
+        <h4>🏅 MTD Achieved</h4>
+        <p>{kpi1:,.0f}</p>
+    </div>
+    <div class="kpi-box">
+        <h4>🎯 Monthly Target</h4>
+        <p>{kpi2:,.0f}</p>
+    </div>
+    <div class="kpi-box">
+        <h4>📅 Daily Achieved</h4>
+        <p>{kpi3:,.0f}</p>
+    </div>
+    <div class="kpi-box">
+        <h4>📈 Projected Landing</h4>
+        <p>{kpi4:,.0f}</p>
+    </div>
+    <div class="kpi-box">
+        <h4>💼 Days Worked</h4>
+        <p>{days_worked} / {total_working_days}</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # === SALES VS TARGET CHART ===
 st.markdown("### 📊 Sales vs Monthly Target (MTD)")
