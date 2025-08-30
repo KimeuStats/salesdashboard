@@ -320,16 +320,6 @@ for col in percent_cols:
 for col in df_display.columns:
     if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
         df_display[col] = df_display[col].round(1)
-   # Add comma formatting for numeric columns
-for col in df_display.columns:
-    if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
-        gb.configure_column(
-            col,
-            type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-            valueFormatter=JsCode("function(params) { return params.value != null ? params.value.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) : ''; }"),
-            headerClass='header-center'
-        )
-     
 
 # AgGrid setup
 gb = GridOptionsBuilder.from_dataframe(df_display)
