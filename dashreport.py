@@ -184,194 +184,62 @@ df.rename(columns={
 kpi1 = df['MTD Act.'].sum()
 kpi2 = df['Monthly TGT'].sum()
 kpi3 = df['Daily Achieved'].sum()
-kpi4 = df['Projected landing'].sum()
+kpi4 = df['Daily Tgt'].sum()
 
-# === STYLES ===
-st.markdown("""
-<style>
-.kpi-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-top: 10px;
-    justify-content: space-between;
-}
-.kpi-box {
-    flex: 1 1 calc(20% - 16px);
-    background-color: #f7f7fb;
-    border-left: 6px solid #7b38d8;
-    border-radius: 10px;
-    padding: 16px;
-    min-width: 150px;
-    box-shadow: 1px 1px 4px rgba(0,0,0,0.05);
-}
-.kpi-box h4 {
-    margin: 0;
-    font-size: 14px;
-    color: #555;
-    font-weight: 600;
-}
-.kpi-box p {
-    margin: 5px 0 0 0;
-    font-size: 22px;
-    font-weight: bold;
-    color: #222;
-}
-@media only screen and (max-width: 768px) {
-    .kpi-box {
-        flex: 1 1 calc(48% - 16px);
-    }
-}
-</style>
-""", unsafe_allow_html=True)
+# === REPLACE 'Paints' ROW WITH 'Totals' ROW ===
+if 'Totals' in df['category1'].values:
+    totals_row = df[df['category1'] == 'Totals'].iloc[0]
+    paints_idx = df.index[df['category1'] == 'Paints']
+    if len(paints_idx) > 0:
+        df.loc[paints_idx] = totals_row
 
-# === KPI DISPLAY ===
-st.markdown(f"""
-<div class="kpi-grid">
-    <div class="kpi-box">
-        <h4>🏅 MTD Achieved</h4>
-        <p>{kpi1:,.0f}</p>
-    </div>
-    <div class="kpi-box">
-        <h4>🎯 Monthly Target</h4>
-        <p>{kpi2:,.0f}</p>
-    </div>
-    <div class="kpi-box">
-        <h4>📅 Daily Achieved</h4>
-        <p>{kpi3:,.0f}</p>
-    </div>
-    <div class="kpi-box">
-        <h4>📈 Projected Landing</h4>
-        <p>{kpi4:,.0f}</p>
-    </div>
-    <div class="kpi-box">
-        <h4>💼 Days Worked</h4>
-        <p>{days_worked} / {total_working_days}</p>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# === FORMAT NUMBERS ===
+pct_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
+for col in pct_cols:
+    if col in df.columns:
+        df[col] = (df[col] * 100).round(2).astype(str) + '%'
 
-# === SALES VS TARGET CHART ===
-st.markdown("### 📊 Sales vs Monthly Target (MTD)")
-df_chart = df.copy()
-x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
+num_cols = ['Monthly TGT', 'Daily Tgt', 'Daily Achieved', 'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM']
+for col in num_cols:
+    if col in df.columns:
+        df[col] = df[col].apply(lambda x: f"{x:,.0f}")
 
-fig = go.Figure([
-    go.Bar(x=x_labels, y=df_chart['MTD Act.'], name='MTD Achieved', marker_color='orange'),
-    go.Bar(x=x_labels, y=df_chart['Monthly TGT'], name='Monthly Target', marker_color='steelblue')
-])
-fig.update_layout(barmode='group', xaxis_tickangle=-45,
-                  height=500, margin=dict(b=150),
-                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-st.plotly_chart(fig, use_container_width=True)
+# === DISPLAY TABLE ===
+st.dataframe(df.reset_index(drop=True))
 
-# === AGGRID DISPLAY with Paints replaced by Totals ===
-df_display = df.copy()
-percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
-
-def safe_div(n, d): return (n - d) / d if d else 0
-
-# Calculate totals sums for numeric columns
-actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
-totals_values = {
-    'Monthly TGT': df['Monthly TGT'].sum(),
-    'Daily Tgt': df['Daily Tgt'].sum(),
-    'MTD TGT': df['MTD TGT'].sum(),
-    'PYM': df['PYM'].sum()
-}
-
-# Paints row = duplicate of totals (sums)
-paints_row = {
-    'branch': 'Paints',
-    'category1': '',
-    'Monthly TGT': totals_values['Monthly TGT'],
-    'Daily Tgt': totals_values['Daily Tgt'],
-    'MTD TGT': totals_values['MTD TGT'],
-    'PYM': totals_values['PYM'],
-    'Daily Achieved': actual_sums['Daily Achieved'],
-    'MTD Act.': actual_sums['MTD Act.'],
-    'Projected landing': actual_sums['Projected landing'],
-    'CM': actual_sums['CM'],
-    'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], totals_values['Daily Tgt']),
-    'MTD Var': safe_div(actual_sums['MTD Act.'], totals_values['MTD TGT']),
-    'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], totals_values['Monthly TGT']),
-    'CM VS PYM': safe_div(actual_sums['CM'], totals_values['PYM']),
-    'is_totals': False
-}
-paints_row = pd.DataFrame([paints_row])
-
-totals = paints_row.copy()
-totals['branch'] = 'Totals'
-totals['is_totals'] = True
-
-# Remove existing Paints row(s) if any
-df_display = df_display[df_display['category1'].str.lower() != 'paints']
-
-# Append Paints and Totals rows
-df_display = pd.concat([df_display, paints_row], ignore_index=True)
-df_display = pd.concat([df_display, totals], ignore_index=True)
-
-# AGGRID OPTIONS
-gb = GridOptionsBuilder.from_dataframe(df_display)
-
-for col in df_display.columns:
-    if col in percent_cols:
-        gb.configure_column(col, type=["numericColumn", "customPercentageFormat"],
-                            cellStyle={'color': 'green'},
-                            valueFormatter="(x*100).toFixed(2) + '%'")
-    elif col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM', 'Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']:
-        gb.configure_column(col, type=["numericColumn", "customNumberFormat"],
-                            valueFormatter="x.toLocaleString()")
-
-# Style totals row
-gb.configure_grid_options(getRowStyle=JsCode("""
-    function(params) {
-        if (params.data.is_totals) {
-            return {'background-color': '#7b38d8', 'color': 'white', 'font-weight': 'bold'};
-        }
-    }
-"""))
-
-gridOptions = gb.build()
-
-grid_response = AgGrid(
-    df_display,
-    gridOptions=gridOptions,
-    enable_enterprise_modules=False,
-    theme='material',
-    height=500,
-    fit_columns_on_grid_load=True,
-    allow_unsafe_jscode=True,
-    reload_data=True,
-)
-
-# === DOWNLOAD BUTTON ===
+# === EXCEL DOWNLOAD BUTTON ===
 def to_excel(df):
     output = io.BytesIO()
     writer = pd.ExcelWriter(output, engine='openpyxl')
-    df.to_excel(writer, index=False, sheet_name='Report')
+    df.to_excel(writer, index=False, sheet_name='Sheet1')
     workbook = writer.book
-    worksheet = writer.sheets['Report']
+    worksheet = writer.sheets['Sheet1']
 
-    fill = PatternFill(start_color='7b38d8', end_color='7b38d8', fill_type='solid')
+    # Conditional formatting example on 'MTD Var' column (if it exists)
+    if 'MTD Var' in df.columns:
+        red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
+        green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
+        col_idx = df.columns.get_loc('MTD Var') + 1  # Excel columns start at 1
+        col_letter = openpyxl.utils.get_column_letter(col_idx)
 
-    for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
-        if row[0].value == 'Totals':
-            for cell in row:
-                cell.fill = fill
-                cell.font = openpyxl.styles.Font(color='FFFFFF', bold=True)
+        worksheet.conditional_formatting.add(f"{col_letter}2:{col_letter}{len(df)+1}",
+                                             CellIsRule(operator='lessThan', formula=['0'], stopIfTrue=True, fill=red_fill))
+        worksheet.conditional_formatting.add(f"{col_letter}2:{col_letter}{len(df)+1}",
+                                             CellIsRule(operator='greaterThanOrEqual', formula=['0'], stopIfTrue=True, fill=green_fill))
 
     writer.save()
     processed_data = output.getvalue()
     return processed_data
 
-# Prepare download data without is_totals column
-df_download = df_display.drop(columns=['is_totals'])
-excel_data = to_excel(df_download)
+excel_data = to_excel(df)
 
 st.download_button(
-    label='⬇️ Download Report as Excel',
+    label='📥 Download data as Excel',
     data=excel_data,
-    file_name='Muthokinju_Paints_Sales_Report.xlsx',
+    file_name='muthokinju_paints_sales_dashboard.xlsx',
     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 )
+
+# === REFRESH BUTTON ===
+if st.button("Refresh Data"):
+    st.experimental_rerun()
