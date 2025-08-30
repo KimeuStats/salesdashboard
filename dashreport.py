@@ -268,6 +268,7 @@ fig.update_layout(barmode='group', xaxis_tickangle=-45,
 st.plotly_chart(fig, use_container_width=True)
 
 # === AGGRID DISPLAY with Totals Row ===
+# === AGGRID DISPLAY with Totals Row ===
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
@@ -284,10 +285,6 @@ else:
         'MTD TGT': paints_row['MTD TGT'].values[0],
         'PYM': paints_row['PYM'].values[0]
     }
-    # Add Paints row as duplicate
-    paints_row = paints_row.copy()
-    paints_row['branch'] = 'Paints'
-    paints_row['is_totals'] = False
 
 # 2. Sum actuals
 actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
@@ -313,18 +310,9 @@ totals = {
     'is_totals': True
 }
 
-# 4. Append Paints row and then Totals row
-if not paints_row.empty:
-    df_display = pd.concat([df_display, paints_row], ignore_index=True)
-
+# 4. Append Totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 
-# Formatting
-for col in percent_cols:
-    df_display[col] = (df_display[col].astype(float) * 100).round(1)
-for col in df_display.columns:
-    if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
-        df_display[col] = df_display[col].round(1)
 
 
 # AgGrid setup
