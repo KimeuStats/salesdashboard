@@ -314,7 +314,6 @@ totals = {
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 
 
-
 # AgGrid setup
 gb = GridOptionsBuilder.from_dataframe(df_display)
 gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
