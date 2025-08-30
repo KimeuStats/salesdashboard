@@ -91,7 +91,8 @@ prev_year_sales['date'] = pd.to_datetime(prev_year_sales['date'])
 for df in [sales, targets, prev_year_sales]:
     df['amount'] = df['amount'].astype(str).str.replace(',', '').astype(float)
 
-targets_agg = targets.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
+targets_agg = targets[targets['category1'] == 'Paints'].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
+
 
 # === HELPER FUNCTION ===
 def working_days_excl_sundays(start_date, end_date):
