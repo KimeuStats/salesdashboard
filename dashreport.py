@@ -253,102 +253,113 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# === SALES VS TARGET CHART ===
-st.markdown("### 📊 Sales vs Monthly Target (MTD)")
-df_chart = df.copy()
-x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
-
-fig = go.Figure([
-    go.Bar(x=x_labels, y=df_chart['MTD Act.'], name='MTD Achieved', marker_color='orange'),
-    go.Bar(x=x_labels, y=df_chart['Monthly TGT'], name='Monthly Target', marker_color='steelblue')
-])
-fig.update_layout(barmode='group', xaxis_tickangle=-45,
-                  height=500, margin=dict(b=150),
-                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-st.plotly_chart(fig, use_container_width=True)
-
-# === AGGRID DISPLAY with Totals Row ===
+# === TABLE PREP ===
 df_display = df.copy()
-percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
-numeric_cols_to_sum = ['Monthly TGT', 'Daily Tgt', 'Daily Achieved', 'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM']
 
-totals = {col: df_display[col].sum() if col in numeric_cols_to_sum else '' for col in df_display.columns}
-totals['branch'], totals['category1'] = 'Totals', ''
-def safe_div(n, d): return (n - d)/d if d else 0
-totals['Achieved vs Daily Tgt'] = safe_div(totals['Daily Achieved'], totals['Daily Tgt'])
-totals['MTD Var'] = safe_div(totals['MTD Act.'], totals['MTD TGT'])
-totals['Achieved VS Monthly tgt'] = safe_div(totals['MTD Act.'], totals['Monthly TGT'])
-totals['CM VS PYM'] = safe_div(totals['CM'], totals['PYM'])
+# Format percentage columns for display
+percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
+for col in percent_cols:
+    df_display[col] = df_display[col].apply(lambda x: f"{x:.0%}" if pd.notnull(x) else "")
+
+# Columns to sum for totals except targets
+numeric_cols_to_sum = ['Daily Achieved', 'MTD Act.', 'PYM', 'CM', 'Projected landing']
+
+# === TOTALS ROW WITH PAINTS TARGETS ===
+# Get paints monthly target sum (case-insensitive)
+paints_targets = targets_agg[targets_agg['category1'].str.lower() == 'paints']['monthly_target'].sum()
+
+# Calculate daily and MTD targets for paints targets
+daily_tgt_paints = paints_targets / total_working_days if total_working_days > 0 else 0
+mtd_tgt_paints = daily_tgt_paints * days_worked
+
+# Build totals dictionary
+totals = {}
+
+for col in df_display.columns:
+    if col == 'Monthly TGT':
+        totals[col] = paints_targets
+    elif col == 'Daily Tgt':
+        totals[col] = daily_tgt_paints
+    elif col == 'MTD TGT':
+        totals[col] = mtd_tgt_paints
+    elif col in numeric_cols_to_sum:
+        totals[col] = df_display[col].replace('[\%,]', '', regex=True).astype(float).sum()
+    elif col in percent_cols:
+        totals[col] = ''  # We'll compute percentages after
+    elif col in ['branch', 'category1']:
+        totals[col] = 'Totals' if col == 'branch' else ''
+    else:
+        totals[col] = ''
+
+def safe_div(n, d):
+    return (n - d) / d if d else 0
+
+# Compute percentage columns for totals based on sums
+totals['Achieved vs Daily Tgt'] = f"{safe_div(totals['Daily Achieved'], totals['Daily Tgt']):.0%}"
+totals['MTD Var'] = f"{safe_div(totals['MTD Act.'], totals['MTD TGT']):.0%}"
+totals['Achieved VS Monthly tgt'] = f"{safe_div(totals['MTD Act.'], totals['Monthly TGT']):.0%}"
+totals['CM VS PYM'] = f"{safe_div(totals['CM'], totals['PYM']):.0%}"
+
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 df_display['is_totals'] = df_display['branch'] == 'Totals'
 
-# Formatting
-for col in percent_cols:
-    df_display[col] = (df_display[col].astype(float) * 100).round(1)
-for col in df_display.columns:
-    if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
-        df_display[col] = df_display[col].round(1)
-
-# AgGrid setup
+# === AGGRID TABLE ===
 gb = GridOptionsBuilder.from_dataframe(df_display)
-gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
-gb.configure_column("is_totals", hide=True)
+gb.configure_default_column(editable=False, filter=True, resizable=True, sortable=True)
 
-cell_style_jscode = JsCode("""
-function(params) {
-    if (params.value == null) return {};
-    if (params.value < 0) {
-        return {color: 'black', backgroundColor: '#ffc0cb', fontWeight: 'bold', textAlign: 'center'};
-    } else if (params.value > 0) {
-        return {color: 'black', backgroundColor: '#d0f0c0', textAlign: 'center'};
-    }
-    return {textAlign: 'center'};
-}
-""")
-for col in percent_cols:
-    gb.configure_column(col, cellStyle=cell_style_jscode,
-                        type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-                        valueFormatter="x.toFixed(1) + '%'", headerClass='header-center')
-gb.configure_grid_options(getRowStyle=JsCode("""
+# Style totals row differently
+cellsytle_jscode = JsCode("""
 function(params) {
     if (params.data.is_totals) {
-        return {'backgroundColor': '#b2dfdb','fontWeight': 'bold','fontSize': '14px','textAlign': 'center'};
+        return {
+            'background-color': '#7b38d8',
+            'color': 'white',
+            'font-weight': 'bold',
+        }
     }
-    return {};
-}
-"""))
-st.markdown("<style>.ag-theme-material .ag-cell{text-align:center !important;}</style>", unsafe_allow_html=True)
+};
+""")
+gb.configure_columns(df_display.columns.tolist(), cellStyle=cellsytle_jscode)
 
-st.markdown("### <center>📋 <span style='font-size:22px; font-weight:bold; color:#7b38d8;'>PERFORMANCE TABLE</span></center>", unsafe_allow_html=True)
-AgGrid(df_display, gridOptions=gb.build(), enable_enterprise_modules=False,
-       allow_unsafe_jscode=True, theme="material", height=500, fit_columns_on_grid_load=False, reload_data=True)
+grid_options = gb.build()
 
-# === EXCEL DOWNLOAD ===
-df_excel = df_display.drop(columns=['is_totals', '::auto_unique_id::'], errors='ignore').copy()
-for col in percent_cols:
-    df_excel[col] = df_excel[col] / 100  # revert to decimal for Excel
+st.markdown("<h3>Performance Details</h3>", unsafe_allow_html=True)
+AgGrid(df_display, gridOptions=grid_options, theme="material", enable_enterprise_modules=True, height=400, fit_columns_on_grid_load=True)
 
-excel_buffer = io.BytesIO()
-with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-    df_excel.to_excel(writer, index=False, sheet_name='Performance')
-    ws = writer.sheets['Performance']
-    header = list(df_excel.columns)
-    fill_neg = PatternFill(start_color='FFC0CB', end_color='FFC0CB', fill_type='solid')
-    fill_pos = PatternFill(start_color='D0F0C0', end_color='D0F0C0', fill_type='solid')
-    for col_name in percent_cols:
-        if col_name in header:
-            col_idx = header.index(col_name) + 1
-            for row in range(2, len(df_excel) + 2):
-                ws.cell(row=row, column=col_idx).number_format = '0.0%'
-            ws.conditional_formatting.add(
-                f"{openpyxl.utils.get_column_letter(col_idx)}2:{openpyxl.utils.get_column_letter(col_idx)}{len(df_excel)+1}",
-                CellIsRule(operator='lessThan', formula=['0'], fill=fill_neg))
-            ws.conditional_formatting.add(
-                f"{openpyxl.utils.get_column_letter(col_idx)}2:{openpyxl.utils.get_column_letter(col_idx)}{len(df_excel)+1}",
-                CellIsRule(operator='greaterThan', formula=['0'], fill=fill_pos))
+# === EXCEL DOWNLOAD WITH FORMATTING ===
+def to_excel(df):
+    output = io.BytesIO()
+    writer = pd.ExcelWriter(output, engine='openpyxl')
+    df.to_excel(writer, index=False, sheet_name='Sheet1')
 
-excel_buffer.seek(0)
-st.download_button(label="📥 Download Table as Excel",
-                   data=excel_buffer,
-                   file_name="sales_dashboard_with_totals.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    workbook = writer.book
+    worksheet = writer.sheets['Sheet1']
+
+    # Define fill colors
+    total_fill = PatternFill(start_color='7B38D8', end_color='7B38D8', fill_type='solid')
+    percent_fill = PatternFill(start_color='EEE9F6', end_color='EEE9F6', fill_type='solid')
+
+    # Apply fill to totals row
+    for row in range(2, len(df) + 2):
+        if df.loc[row-2, 'is_totals']:
+            for col in range(1, len(df.columns) + 1):
+                worksheet.cell(row=row, column=col).fill = total_fill
+
+    # Highlight % columns with lighter fill
+    percent_cols_excel = [df.columns.get_loc(col) + 1 for col in percent_cols if col in df.columns]
+    for row in range(2, len(df) + 2):
+        for col in percent_cols_excel:
+            worksheet.cell(row=row, column=col).fill = percent_fill
+
+    writer.save()
+    processed_data = output.getvalue()
+    return processed_data
+
+excel_data = to_excel(df_display)
+
+st.download_button(
+    label='📥 Download Excel',
+    data=excel_data,
+    file_name='sales_dashboard.xlsx',
+    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+)
