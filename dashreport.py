@@ -271,15 +271,31 @@ st.plotly_chart(fig, use_container_width=True)
 # === AGGRID DISPLAY with Totals Row ===
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
-numeric_cols_to_sum = ['Monthly TGT', 'Daily Tgt', 'Daily Achieved', 'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM']
+numeric_cols_to_sum = ['Daily Tgt', 'Daily Achieved', 'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM']
 
-totals = {col: df_display[col].sum() if col in numeric_cols_to_sum else '' for col in df_display.columns}
+# Use "Paints" only for the targets
+paint_targets = df_display[df_display['category1'] == 'Paints']
+
+totals = {
+    col: df_display[col].sum() if col in numeric_cols_to_sum else ''
+    for col in df_display.columns
+}
+
+# Use targets only from Paints for these target columns
+totals['Monthly TGT'] = paint_targets['Monthly TGT'].sum()
+totals['Daily Tgt'] = paint_targets['Daily Tgt'].sum()
+totals['MTD TGT'] = paint_targets['MTD TGT'].sum()
+
 totals['branch'], totals['category1'] = 'Totals', ''
+
+# Safely calculate % columns
 def safe_div(n, d): return (n - d)/d if d else 0
 totals['Achieved vs Daily Tgt'] = safe_div(totals['Daily Achieved'], totals['Daily Tgt'])
 totals['MTD Var'] = safe_div(totals['MTD Act.'], totals['MTD TGT'])
 totals['Achieved VS Monthly tgt'] = safe_div(totals['MTD Act.'], totals['Monthly TGT'])
 totals['CM VS PYM'] = safe_div(totals['CM'], totals['PYM'])
+
+# Append to the display DataFrame
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 df_display['is_totals'] = df_display['branch'] == 'Totals'
 
