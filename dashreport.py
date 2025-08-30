@@ -322,10 +322,12 @@ for col in df_display.columns:
         df_display[col] = df_display[col].round(1)
 
 # AgGrid setup
+# AgGrid setup
 gb = GridOptionsBuilder.from_dataframe(df_display)
 gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
 gb.configure_column("is_totals", hide=True)
 
+# Style for % columns
 cell_style_jscode = JsCode("""
 function(params) {
     if (params.value == null) return {};
@@ -337,18 +339,48 @@ function(params) {
     return {textAlign: 'center'};
 }
 """)
+
+# Apply formatting for % columns
 for col in percent_cols:
-    gb.configure_column(col, cellStyle=cell_style_jscode,
-                        type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-                        valueFormatter="x.toFixed(1) + '%'", headerClass='header-center')
+    gb.configure_column(
+        col,
+        cellStyle=cell_style_jscode,
+        type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+        valueFormatter="x.toFixed(1) + '%'",
+        headerClass='header-center'
+    )
+
+# 💡 Apply comma formatting to numeric (non-percentage) columns
+for col in df_display.columns:
+    if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
+        gb.configure_column(
+            col,
+            type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+            valueFormatter=JsCode("""
+                function(params) {
+                    return params.value != null 
+                        ? params.value.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) 
+                        : '';
+                }
+            """),
+            headerClass='header-center'
+        )
+
+# Totals row styling
 gb.configure_grid_options(getRowStyle=JsCode("""
 function(params) {
     if (params.data.is_totals) {
-        return {'backgroundColor': '#b2dfdb','fontWeight': 'bold','fontSize': '14px','textAlign': 'center'};
+        return {
+            backgroundColor: '#b2dfdb',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            textAlign: 'center'
+        };
     }
     return {};
 }
 """))
+
 st.markdown("<style>.ag-theme-material .ag-cell{text-align:center !important;}</style>", unsafe_allow_html=True)
 
 st.markdown("### <center>📋 <span style='font-size:22px; font-weight:bold; color:#7b38d8;'>PERFORMANCE TABLE</span></center>", unsafe_allow_html=True)
