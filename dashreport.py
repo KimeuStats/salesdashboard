@@ -269,19 +269,50 @@ fig.update_layout(barmode='group', xaxis_tickangle=-45,
 st.plotly_chart(fig, use_container_width=True)
 
 # === AGGRID DISPLAY with Totals Row ===
+# === AGGRID DISPLAY with Totals Row ===
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
-numeric_cols_to_sum = ['Monthly TGT', 'Daily Tgt', 'Daily Achieved', 'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM']
 
-totals = {col: df_display[col].sum() if col in numeric_cols_to_sum else '' for col in df_display.columns}
-totals['branch'], totals['category1'] = 'Totals', ''
-def safe_div(n, d): return (n - d)/d if d else 0
-totals['Achieved vs Daily Tgt'] = safe_div(totals['Daily Achieved'], totals['Daily Tgt'])
-totals['MTD Var'] = safe_div(totals['MTD Act.'], totals['MTD TGT'])
-totals['Achieved VS Monthly tgt'] = safe_div(totals['MTD Act.'], totals['Monthly TGT'])
-totals['CM VS PYM'] = safe_div(totals['CM'], totals['PYM'])
+# 1. Get Paints row (case-insensitive)
+paints_row = df_display[df_display['category1'].str.lower() == 'paints']
+
+if paints_row.empty:
+    st.warning("⚠️ 'Paints' row not found — totals may be inaccurate.")
+    paints_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
+else:
+    paints_values = {
+        'Monthly TGT': paints_row['Monthly TGT'].values[0],
+        'Daily Tgt': paints_row['Daily Tgt'].values[0],
+        'MTD TGT': paints_row['MTD TGT'].values[0],
+        'PYM': paints_row['PYM'].values[0]
+    }
+
+# 2. Sum actuals
+actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
+
+# 3. Calculate percentages
+def safe_div(n, d): return (n - d) / d if d else 0
+
+totals = {
+    'branch': 'Totals',
+    'category1': '',
+    'Monthly TGT': paints_values['Monthly TGT'],
+    'Daily Tgt': paints_values['Daily Tgt'],
+    'MTD TGT': paints_values['MTD TGT'],
+    'PYM': paints_values['PYM'],
+    'Daily Achieved': actual_sums['Daily Achieved'],
+    'MTD Act.': actual_sums['MTD Act.'],
+    'Projected landing': actual_sums['Projected landing'],
+    'CM': actual_sums['CM'],
+    'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], paints_values['Daily Tgt']),
+    'MTD Var': safe_div(actual_sums['MTD Act.'], paints_values['MTD TGT']),
+    'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], paints_values['Monthly TGT']),
+    'CM VS PYM': safe_div(actual_sums['CM'], paints_values['PYM']),
+    'is_totals': True
+}
+
+# 4. Append Totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
-df_display['is_totals'] = df_display['branch'] == 'Totals'
 
 # Formatting
 for col in percent_cols:
