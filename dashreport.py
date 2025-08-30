@@ -182,10 +182,14 @@ df.rename(columns={
 }, inplace=True)
 
 # === KPI CALCULATIONS ===
-kpi1 = df['MTD Act.'].sum()
-kpi2 = df['Monthly TGT'].sum()
-kpi3 = df['Daily Achieved'].sum()
-kpi4 = df['Projected landing'].sum()
+# === KPI CALCULATIONS ===
+totals_row = df_display[df_display['branch'] == 'Totals'].iloc[0]
+
+kpi1 = totals_row['MTD Act.']
+kpi2 = totals_row['Monthly TGT']
+kpi3 = totals_row['Daily Achieved']
+kpi4 = totals_row['Projected landing']
+
 days_worked = working_days_excl_sundays(month_start, end_dt)
 total_working_days = working_days_excl_sundays(month_start, month_end)
 
