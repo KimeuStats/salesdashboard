@@ -268,21 +268,78 @@ fig.update_layout(barmode='group', xaxis_tickangle=-45,
 st.plotly_chart(fig, use_container_width=True)
 
 # === AGGRID DISPLAY with Totals Row ===
+# === AGGRID DISPLAY with Totals Row ===
 df_display = df.copy()
-percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
-numeric_cols_to_sum = ['Monthly TGT', 'Daily Tgt', 'Daily Achieved', 'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM']
 
-totals = {col: df_display[col].sum() if col in numeric_cols_to_sum else '' for col in df_display.columns}
-totals['branch'], totals['category1'] = 'Totals', ''
-def safe_div(n, d): return (n - d)/d if d else 0
-totals['Achieved vs Daily Tgt'] = safe_div(totals['Daily Achieved'], totals['Daily Tgt'])
-totals['MTD Var'] = safe_div(totals['MTD Act.'], totals['MTD TGT'])
-totals['Achieved VS Monthly tgt'] = safe_div(totals['MTD Act.'], totals['Monthly TGT'])
-totals['CM VS PYM'] = safe_div(totals['CM'], totals['PYM'])
+# Ensure all categories appear even if no sales by merging with all possible categories and branches
+all_branches = [selected_branch] if selected_branch != "All" else df['branch'].unique()
+all_categories = [selected_category] if selected_category != "All" else df['category1'].unique()
+
+# Create full index of all combinations of branch and category
+import itertools
+full_index = pd.DataFrame(list(itertools.product(all_branches, all_categories)), columns=['branch', 'category1'])
+
+# Merge df with full_index to fill missing combinations with zeros
+df_display = full_index.merge(df_display, on=['branch', 'category1'], how='left').fillna(0)
+
+# Make sure targets are preserved by merging original targets_agg for these combinations (targets_agg has all branch-category targets)
+df_display = df_display.drop(columns=['Monthly TGT'], errors='ignore')
+df_display = df_display.merge(targets_agg.rename(columns={'monthly_target':'Monthly TGT'}), on=['branch', 'category1'], how='left')
+df_display['Monthly TGT'].fillna(0, inplace=True)
+
+# Fill NaNs in numeric columns
+numeric_cols = ['Daily Tgt', 'Daily Achieved', 'MTD TGT', 'MTD Act.', 'CM', 'Projected landing', 'PYM']
+for col in numeric_cols:
+    if col in df_display.columns:
+        df_display[col] = df_display[col].fillna(0)
+
+# Recalculate % columns based on corrected numbers
+def safe_div(n, d):
+    return (n - d)/d if d else 0
+
+df_display['Achieved vs Daily Tgt'] = df_display.apply(lambda row: safe_div(row['Daily Achieved'], row['Daily Tgt']), axis=1)
+df_display['MTD Var'] = df_display.apply(lambda row: safe_div(row['MTD Act.'], row['MTD TGT']), axis=1)
+df_display['Achieved VS Monthly tgt'] = df_display.apply(lambda row: safe_div(row['MTD Act.'], row['Monthly TGT']), axis=1)
+df_display['CM VS PYM'] = df_display.apply(lambda row: safe_div(row['CM'], row['PYM']), axis=1)
+
+# Prepare totals row
+totals = {}
+
+# For branch and category1, totals row branch should be filter branch or 'Totals' if 'All', category1 = 'Totals'
+if selected_branch == "All":
+    totals['branch'] = 'Totals'
+else:
+    totals['branch'] = selected_branch
+
+totals['category1'] = 'Totals'
+
+# Sum numeric columns except targets (which should be total monthly target from targets_agg filtered by branch/category)
+for col in df_display.columns:
+    if col in numeric_cols + ['Monthly TGT']:
+        if col == 'Monthly TGT':
+            # Sum targets ONLY for the branches/categories displayed (not sum if all branches)
+            # So sum targets for the filtered branch/categories in df_display
+            totals[col] = df_display[col].sum()
+        else:
+            totals[col] = df_display[col].sum()
+    else:
+        totals[col] = ''
+
+# Recalculate totals % columns using summed values
+totals['Achieved vs Daily Tgt'] = safe_div(totals.get('Daily Achieved',0), totals.get('Daily Tgt',0))
+totals['MTD Var'] = safe_div(totals.get('MTD Act.',0), totals.get('MTD TGT',0))
+totals['Achieved VS Monthly tgt'] = safe_div(totals.get('MTD Act.',0), totals.get('Monthly TGT',0))
+totals['CM VS PYM'] = safe_div(totals.get('CM',0), totals.get('PYM',0))
+
+# Append totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
-df_display['is_totals'] = df_display['branch'] == 'Totals'
+
+# Mark totals row for styling
+df_display['is_totals'] = df_display['category1'] == 'Totals'
 
 # Formatting
+percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
+
 for col in percent_cols:
     df_display[col] = (df_display[col].astype(float) * 100).round(1)
 for col in df_display.columns:
