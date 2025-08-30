@@ -185,8 +185,6 @@ kpi1 = df['MTD Act.'].sum()
 kpi2 = df['Monthly TGT'].sum()
 kpi3 = df['Daily Achieved'].sum()
 kpi4 = df['Projected landing'].sum()
-days_worked = working_days_excl_sundays(month_start, end_dt)
-total_working_days = working_days_excl_sundays(month_start, month_end)
 
 # === STYLES ===
 st.markdown("""
@@ -267,126 +265,113 @@ fig.update_layout(barmode='group', xaxis_tickangle=-45,
                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig, use_container_width=True)
 
-# === AGGRID DISPLAY with Totals Row ===
+# === AGGRID DISPLAY with Paints replaced by Totals ===
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-# 1. Get Paints row (case-insensitive)
-paints_row = df_display[df_display['category1'].str.lower() == 'paints']
-
-if paints_row.empty:
-    st.warning("⚠️ 'Paints' row not found — totals may be inaccurate.")
-    paints_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
-else:
-    paints_values = {
-        'Monthly TGT': paints_row['Monthly TGT'].values[0],
-        'Daily Tgt': paints_row['Daily Tgt'].values[0],
-        'MTD TGT': paints_row['MTD TGT'].values[0],
-        'PYM': paints_row['PYM'].values[0]
-    }
-    # Add Paints row as duplicate
-    paints_row = paints_row.copy()
-    paints_row['branch'] = 'Paints'
-    paints_row['is_totals'] = False
-
-# 2. Sum actuals
-actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
-
-# 3. Calculate percentages
 def safe_div(n, d): return (n - d) / d if d else 0
 
-totals = {
-    'branch': 'Totals',
+# Calculate totals sums for numeric columns
+actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
+totals_values = {
+    'Monthly TGT': df['Monthly TGT'].sum(),
+    'Daily Tgt': df['Daily Tgt'].sum(),
+    'MTD TGT': df['MTD TGT'].sum(),
+    'PYM': df['PYM'].sum()
+}
+
+# Paints row = duplicate of totals (sums)
+paints_row = {
+    'branch': 'Paints',
     'category1': '',
-    'Monthly TGT': paints_values['Monthly TGT'],
-    'Daily Tgt': paints_values['Daily Tgt'],
-    'MTD TGT': paints_values['MTD TGT'],
-    'PYM': paints_values['PYM'],
+    'Monthly TGT': totals_values['Monthly TGT'],
+    'Daily Tgt': totals_values['Daily Tgt'],
+    'MTD TGT': totals_values['MTD TGT'],
+    'PYM': totals_values['PYM'],
     'Daily Achieved': actual_sums['Daily Achieved'],
     'MTD Act.': actual_sums['MTD Act.'],
     'Projected landing': actual_sums['Projected landing'],
     'CM': actual_sums['CM'],
-    'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], paints_values['Daily Tgt']),
-    'MTD Var': safe_div(actual_sums['MTD Act.'], paints_values['MTD TGT']),
-    'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], paints_values['Monthly TGT']),
-    'CM VS PYM': safe_div(actual_sums['CM'], paints_values['PYM']),
-    'is_totals': True
+    'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], totals_values['Daily Tgt']),
+    'MTD Var': safe_div(actual_sums['MTD Act.'], totals_values['MTD TGT']),
+    'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], totals_values['Monthly TGT']),
+    'CM VS PYM': safe_div(actual_sums['CM'], totals_values['PYM']),
+    'is_totals': False
 }
+paints_row = pd.DataFrame([paints_row])
 
-# 4. Append Paints row and then Totals row
-if not paints_row.empty:
-    df_display = pd.concat([df_display, paints_row], ignore_index=True)
+totals = paints_row.copy()
+totals['branch'] = 'Totals'
+totals['is_totals'] = True
 
-df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
+# Remove existing Paints row(s) if any
+df_display = df_display[df_display['category1'].str.lower() != 'paints']
 
-# Formatting
-for col in percent_cols:
-    df_display[col] = (df_display[col].astype(float) * 100).round(1)
-for col in df_display.columns:
-    if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
-        df_display[col] = df_display[col].round(1)
+# Append Paints and Totals rows
+df_display = pd.concat([df_display, paints_row], ignore_index=True)
+df_display = pd.concat([df_display, totals], ignore_index=True)
 
-
-# AgGrid setup
+# AGGRID OPTIONS
 gb = GridOptionsBuilder.from_dataframe(df_display)
-gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
-gb.configure_column("is_totals", hide=True)
 
-cell_style_jscode = JsCode("""
-function(params) {
-    if (params.value == null) return {};
-    if (params.value < 0) {
-        return {color: 'black', backgroundColor: '#ffc0cb', fontWeight: 'bold', textAlign: 'center'};
-    } else if (params.value > 0) {
-        return {color: 'black', backgroundColor: '#d0f0c0', textAlign: 'center'};
-    }
-    return {textAlign: 'center'};
-}
-""")
-for col in percent_cols:
-    gb.configure_column(col, cellStyle=cell_style_jscode,
-                        type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-                        valueFormatter="x.toFixed(1) + '%'", headerClass='header-center')
+for col in df_display.columns:
+    if col in percent_cols:
+        gb.configure_column(col, type=["numericColumn", "customPercentageFormat"],
+                            cellStyle={'color': 'green'},
+                            valueFormatter="(x*100).toFixed(2) + '%'")
+    elif col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM', 'Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']:
+        gb.configure_column(col, type=["numericColumn", "customNumberFormat"],
+                            valueFormatter="x.toLocaleString()")
+
+# Style totals row
 gb.configure_grid_options(getRowStyle=JsCode("""
-function(params) {
-    if (params.data.is_totals) {
-        return {'backgroundColor': '#b2dfdb','fontWeight': 'bold','fontSize': '14px','textAlign': 'center'};
+    function(params) {
+        if (params.data.is_totals) {
+            return {'background-color': '#7b38d8', 'color': 'white', 'font-weight': 'bold'};
+        }
     }
-    return {};
-}
 """))
-st.markdown("<style>.ag-theme-material .ag-cell{text-align:center !important;}</style>", unsafe_allow_html=True)
 
-st.markdown("### <center>📋 <span style='font-size:22px; font-weight:bold; color:#7b38d8;'>PERFORMANCE TABLE</span></center>", unsafe_allow_html=True)
-AgGrid(df_display, gridOptions=gb.build(), enable_enterprise_modules=False,
-       allow_unsafe_jscode=True, theme="material", height=500, fit_columns_on_grid_load=False, reload_data=True)
+gridOptions = gb.build()
 
-# === EXCEL DOWNLOAD ===
-df_excel = df_display.drop(columns=['is_totals', '::auto_unique_id::'], errors='ignore').copy()
-for col in percent_cols:
-    df_excel[col] = df_excel[col] / 100  # revert to decimal for Excel
+grid_response = AgGrid(
+    df_display,
+    gridOptions=gridOptions,
+    enable_enterprise_modules=False,
+    theme='material',
+    height=500,
+    fit_columns_on_grid_load=True,
+    allow_unsafe_jscode=True,
+    reload_data=True,
+)
 
-excel_buffer = io.BytesIO()
-with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-    df_excel.to_excel(writer, index=False, sheet_name='Performance')
-    ws = writer.sheets['Performance']
-    header = list(df_excel.columns)
-    fill_neg = PatternFill(start_color='FFC0CB', end_color='FFC0CB', fill_type='solid')
-    fill_pos = PatternFill(start_color='D0F0C0', end_color='D0F0C0', fill_type='solid')
-    for col_name in percent_cols:
-        if col_name in header:
-            col_idx = header.index(col_name) + 1
-            for row in range(2, len(df_excel) + 2):
-                ws.cell(row=row, column=col_idx).number_format = '0.0%'
-            ws.conditional_formatting.add(
-                f"{openpyxl.utils.get_column_letter(col_idx)}2:{openpyxl.utils.get_column_letter(col_idx)}{len(df_excel)+1}",
-                CellIsRule(operator='lessThan', formula=['0'], fill=fill_neg))
-            ws.conditional_formatting.add(
-                f"{openpyxl.utils.get_column_letter(col_idx)}2:{openpyxl.utils.get_column_letter(col_idx)}{len(df_excel)+1}",
-                CellIsRule(operator='greaterThan', formula=['0'], fill=fill_pos))
+# === DOWNLOAD BUTTON ===
+def to_excel(df):
+    output = io.BytesIO()
+    writer = pd.ExcelWriter(output, engine='openpyxl')
+    df.to_excel(writer, index=False, sheet_name='Report')
+    workbook = writer.book
+    worksheet = writer.sheets['Report']
 
-excel_buffer.seek(0)
-st.download_button(label="📥 Download Table as Excel",
-                   data=excel_buffer,
-                   file_name="sales_dashboard_with_totals.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    fill = PatternFill(start_color='7b38d8', end_color='7b38d8', fill_type='solid')
+
+    for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+        if row[0].value == 'Totals':
+            for cell in row:
+                cell.fill = fill
+                cell.font = openpyxl.styles.Font(color='FFFFFF', bold=True)
+
+    writer.save()
+    processed_data = output.getvalue()
+    return processed_data
+
+# Prepare download data without is_totals column
+df_download = df_display.drop(columns=['is_totals'])
+excel_data = to_excel(df_download)
+
+st.download_button(
+    label='⬇️ Download Report as Excel',
+    data=excel_data,
+    file_name='Muthokinju_Paints_Sales_Report.xlsx',
+    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+)
