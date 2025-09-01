@@ -156,29 +156,37 @@ if st.session_state.get('show_general_view', False):
     if selected_category_general != "All":
         filtered_general = filtered_general[filtered_general["category1"] == selected_category_general]
 
-    # Apply date filters (reuse start_date, end_date from main date inputs)
-    filtered_general = filtered_general[(filtered_general["date"] >= pd.to_datetime(start_date)) & (filtered_general["date"] <= pd.to_datetime(end_date))]
+    # Ensure end_dt is a proper Timestamp (in case it's still a date object)
+end_dt = pd.to_datetime(end_date)
+start_dt = pd.to_datetime(start_date)
 
-    if filtered_general.empty:
-        st.warning("⚠️ No data for the selected filters in General View")
-    else:
-        # Aggregate by Cluster and Category only
-        mtd_agg = filtered_general.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-        daily_achieved = filtered_general[filtered_general['date'] == pd.to_datetime(end_date)].groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+# Apply date filters
+filtered_general = filtered_general[(filtered_general["date"] >= start_dt) & (filtered_general["date"] <= end_dt)]
 
-        prev_year_filtered = prev_year_sales[
-            (prev_year_sales['date'] >= pd.Timestamp(end_date.year - 1, end_date.month, 1)) &
-            (prev_year_sales['date'] <= pd.Timestamp(end_date.year - 1, end_date.month, end_date.days_in_month))
-        ]
-        pym_agg = prev_year_filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+if filtered_general.empty:
+    st.warning("⚠️ No data for the selected filters in General View")
+else:
+    # Aggregate by Cluster and Category only
+    mtd_agg = filtered_general.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+    daily_achieved = filtered_general[filtered_general['date'] == end_dt].groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
 
-        targets_agg_general = targets.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
+    # Compute number of days in same month of previous year
+    prev_year_month_days = pd.Timestamp(end_dt.year - 1, end_dt.month, 1).days_in_month
 
-        df_general = (mtd_agg.merge(daily_achieved, on=['Cluster', 'category1'], how='left')
-                      .merge(targets_agg_general, on='category1', how='left')
-                      .merge(pym_agg, on=['Cluster', 'category1'], how='left'))
+    # Filter previous year data
+    prev_year_filtered = prev_year_sales[
+        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, prev_year_month_days))
+    ]
+    pym_agg = prev_year_filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
 
-        df_general.fillna(0, inplace=True)
+    targets_agg_general = targets.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
+
+    df_general = (mtd_agg.merge(daily_achieved, on=['Cluster', 'category1'], how='left')
+                          .merge(targets_agg_general, on='category1', how='left')
+                          .merge(pym_agg, on=['Cluster', 'category1'], how='left'))
+
+    df_general.fillna(0, inplace=True)
 
         # Calculate working days KPIs same as before
         # (You can reuse days_worked, total_working_days from main code)
