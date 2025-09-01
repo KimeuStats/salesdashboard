@@ -186,7 +186,7 @@ else:
                           .merge(targets_agg_general, on='category1', how='left')
                           .merge(pym_agg, on=['Cluster', 'category1'], how='left'))
 
-    df_general.fillna(0, inplace=True)
+df_general.fillna(0, inplace=True)
 
         # Calculate working days KPIs same as before
         # (You can reuse days_worked, total_working_days from main code)
