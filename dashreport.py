@@ -275,70 +275,53 @@ st.plotly_chart(fig, use_container_width=True)
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-# === Build Totals Row ===
-if selected_category != "All":
-    # Sum over the filtered category only
-    category_df = df_display[df_display['category1'] == selected_category]
-    target_values = {
-        'Monthly TGT': category_df['Monthly TGT'].sum(),
-        'Daily Tgt': category_df['Daily Tgt'].sum(),
-        'MTD TGT': category_df['MTD TGT'].sum(),
-        'PYM': category_df['PYM'].sum()
-    }
-    category_label = selected_category
-else:
-    # Only pick values from the 'Paints' row (case-insensitive)
-    paints_row = df_display[df_display['category1'].str.lower() == 'paints']
-    if paints_row.empty:
-        st.warning("⚠️ 'Paints' row not found — totals may be inaccurate.")
-        target_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
-    else:
-        paints_row = paints_row.iloc[0]
-        target_values = {
-            'Monthly TGT': paints_row['Monthly TGT'],
-            'Daily Tgt': paints_row['Daily Tgt'],
-            'MTD TGT': paints_row['MTD TGT'],
-            'PYM': paints_row['PYM']
-        }
-    category_label = 'Paints'
+# 1. Get Paints row (case-insensitive)
+paints_row = df_display[df_display['category1'].str.lower() == 'paints']
 
-# Sum actuals (regardless of category)
+if paints_row.empty:
+    st.warning("⚠️ 'Paints' row not found — totals may be inaccurate.")
+    paints_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
+else:
+    paints_values = {
+        'Monthly TGT': paints_row['Monthly TGT'].values[0],
+        'Daily Tgt': paints_row['Daily Tgt'].values[0],
+        'MTD TGT': paints_row['MTD TGT'].values[0],
+        'PYM': paints_row['PYM'].values[0]
+    }
+
+# 2. Sum actuals
 actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
 
-# Safe division helper
+# 3. Calculate percentages
 def safe_div(n, d): return (n - d) / d if d else 0
 
-# Build the totals row
 totals = {
     'branch': 'Totals',
-    'category1': category_label,
-    'Monthly TGT': target_values['Monthly TGT'],
-    'Daily Tgt': target_values['Daily Tgt'],
-    'MTD TGT': target_values['MTD TGT'],
-    'PYM': target_values['PYM'],
+    'category1': '',
+    'Monthly TGT': paints_values['Monthly TGT'],
+    'Daily Tgt': paints_values['Daily Tgt'],
+    'MTD TGT': paints_values['MTD TGT'],
+    'PYM': paints_values['PYM'],
     'Daily Achieved': actual_sums['Daily Achieved'],
     'MTD Act.': actual_sums['MTD Act.'],
     'Projected landing': actual_sums['Projected landing'],
     'CM': actual_sums['CM'],
-    'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], target_values['Daily Tgt']),
-    'MTD Var': safe_div(actual_sums['MTD Act.'], target_values['MTD TGT']),
-    'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], target_values['Monthly TGT']),
-    'CM VS PYM': safe_div(actual_sums['CM'], target_values['PYM']),
+    'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], paints_values['Daily Tgt']),
+    'MTD Var': safe_div(actual_sums['MTD Act.'], paints_values['MTD TGT']),
+    'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], paints_values['Monthly TGT']),
+    'CM VS PYM': safe_div(actual_sums['CM'], paints_values['PYM']),
     'is_totals': True
 }
 
-# Append Totals row to the display DataFrame
+# 4. Append Totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 
-# Format percentage columns
+# Formatting
 for col in percent_cols:
     df_display[col] = (df_display[col].astype(float) * 100).round(1)
-
-# Format other numeric columns
 for col in df_display.columns:
     if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
         df_display[col] = df_display[col].round(1)
-
 
 # AgGrid setup
 # AgGrid setup
