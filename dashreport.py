@@ -79,6 +79,12 @@ try:
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
+# === button ===
+if st.button("Show General View"):
+    st.session_state['show_general_view'] = True
+else:
+    if 'show_general_view' not in st.session_state:
+        st.session_state['show_general_view'] = False
 
 # === CLEAN DATA ===
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
@@ -133,6 +139,78 @@ filtered = filtered[(filtered["date"] >= pd.to_datetime(start_date)) & (filtered
 if filtered.empty:
     st.warning("⚠️ No sales data found for the selected filters or date range.")
     st.stop()
+
+# === below filters ===
+if st.session_state.get('show_general_view', False):
+
+    # Filter data ignoring branch, only by cluster and category
+    filtered_general = sales.copy()
+
+    # Apply cluster filter if selected (you can define selected_cluster_general with a selectbox or reuse your main cluster)
+    selected_cluster_general = st.selectbox("Cluster (General View)", options=["All"] + list(clusters), key="gen_cluster")
+    selected_category_general = st.selectbox("Category (General View)", options=["All"] + list(categories), key="gen_category")
+
+    if selected_cluster_general != "All":
+        filtered_general = filtered_general[filtered_general["Cluster"] == selected_cluster_general]
+
+    if selected_category_general != "All":
+        filtered_general = filtered_general[filtered_general["category1"] == selected_category_general]
+
+    # Apply date filters (reuse start_date, end_date from main date inputs)
+    filtered_general = filtered_general[(filtered_general["date"] >= pd.to_datetime(start_date)) & (filtered_general["date"] <= pd.to_datetime(end_date))]
+
+    if filtered_general.empty:
+        st.warning("⚠️ No data for the selected filters in General View")
+    else:
+        # Aggregate by Cluster and Category only
+        mtd_agg = filtered_general.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+        daily_achieved = filtered_general[filtered_general['date'] == pd.to_datetime(end_date)].groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+
+        prev_year_filtered = prev_year_sales[
+            (prev_year_sales['date'] >= pd.Timestamp(end_date.year - 1, end_date.month, 1)) &
+            (prev_year_sales['date'] <= pd.Timestamp(end_date.year - 1, end_date.month, end_date.days_in_month))
+        ]
+        pym_agg = prev_year_filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+
+        targets_agg_general = targets.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
+
+        df_general = (mtd_agg.merge(daily_achieved, on=['Cluster', 'category1'], how='left')
+                      .merge(targets_agg_general, on='category1', how='left')
+                      .merge(pym_agg, on=['Cluster', 'category1'], how='left'))
+
+        df_general.fillna(0, inplace=True)
+
+        # Calculate working days KPIs same as before
+        # (You can reuse days_worked, total_working_days from main code)
+
+        df_general['daily_tgt'] = np.where(total_working_days > 0, df_general['monthly_target'] / total_working_days, 0)
+        df_general['achieved_vs_daily_tgt'] = np.where(df_general['daily_tgt'] > 0, (df_general['daily_achieved'] - df_general['daily_tgt']) / df_general['daily_tgt'], 0)
+        df_general['mtd_tgt'] = df_general['daily_tgt'] * days_worked
+        df_general['mtd_var'] = np.where(df_general['mtd_tgt'] > 0, (df_general['mtd_achieved'] - df_general['mtd_tgt']) / df_general['mtd_tgt'], 0)
+        df_general['cm'] = df_general['mtd_achieved']
+        df_general['achieved_vs_monthly_tgt'] = np.where(df_general['monthly_target'] > 0, (df_general['mtd_achieved'] - df_general['monthly_target']) / df_general['monthly_target'], 0)
+        df_general['projected_landing'] = np.where(days_worked > 0, (df_general['mtd_achieved'] / days_worked) * total_working_days, 0)
+        df_general['cm_vs_pym'] = np.where(df_general['pym'] > 0, (df_general['cm'] - df_general['pym']) / df_general['pym'], 0)
+
+        # Rename columns for display
+        df_general.rename(columns={
+            'Cluster': 'Cluster',
+            'monthly_target': 'Monthly TGT',
+            'daily_tgt': 'Daily Tgt',
+            'daily_achieved': 'Daily Achieved',
+            'achieved_vs_daily_tgt': 'Achieved vs Daily Tgt',
+            'mtd_tgt': 'MTD TGT',
+            'mtd_achieved': 'MTD Act.',
+            'mtd_var': 'MTD Var',
+            'cm': 'CM',
+            'achieved_vs_monthly_tgt': 'Achieved VS Monthly tgt',
+            'projected_landing': 'Projected landing',
+            'pym': 'PYM',
+            'cm_vs_pym': 'CM VS PYM'
+        }, inplace=True)
+
+        st.write("### General View - Aggregated by Cluster and Category")
+        st.dataframe(df_general)
 
 # === CORRECT WORKING DAYS LOGIC ===
 end_dt = pd.to_datetime(end_date)
