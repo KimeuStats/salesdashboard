@@ -23,66 +23,49 @@ st.markdown("""
         }
         .banner {
             width: 100%;
-            background: linear-gradient(135deg, #3FA0A3, #2E7D80);
-            padding: 15px 30px;
+            background-color: #3FA0A3;
+            padding: 3px 30px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 30px;
-            border-radius: 12px;
-            box-shadow: 0 8px 25px rgba(63, 160, 163, 0.3);
+            margin-bottom: 20px;
         }
         .banner img {
-            height: 60px;
-            margin-right: 20px;
-            border: 3px solid white;
-            border-radius: 50%;
-            box-shadow: 0 0 15px rgba(255,255,255,0.8);
+            height: 52px;
+            margin-right: 15px;
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(255,255,255,0.7);
         }
         .banner h1 {
             color: white;
-            font-size: 28px;
+            font-size: 26px;
             font-weight: bold;
             margin: 0;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
         .ag-theme-material .ag-header {
-            background: linear-gradient(135deg, #7b38d8, #5e2ba8) !important;
+            background-color: #7b38d8 !important;
             color: white !important;
             font-weight: bold !important;
         }
-        .view-selector-container {
-            background: linear-gradient(135deg, #f8f9ff, #e8ebff);
-            padding: 20px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 15px rgba(123, 56, 216, 0.1);
+        .view-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
         }
-        .filters-container {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            border-left: 5px solid #7b38d8;
-        }
-        .stSelectbox > div > div {
-            background: linear-gradient(135deg, #f8f9ff, #ffffff);
-            border: 2px solid #e8ebff;
+        .view-button {
+            padding: 10px 20px;
+            border: 2px solid #7b38d8;
             border-radius: 8px;
+            background-color: white;
+            color: #7b38d8;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
         }
-        .chart-container {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        .table-container {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        .view-button.active {
+            background-color: #7b38d8;
+            color: white;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -108,14 +91,12 @@ else:
     st.error("⚠️ Failed to load logo image.")
 
 # === VIEW SELECTOR ===
-st.markdown('<div class="view-selector-container">', unsafe_allow_html=True)
 st.markdown("### 🎯 Dashboard View")
 view_col1, view_col2 = st.columns(2)
 with view_col1:
     branch_view = st.button("📊 Branch View", use_container_width=True)
 with view_col2:
     general_view = st.button("🌐 General View", use_container_width=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
 # Initialize session state for view
 if 'current_view' not in st.session_state:
@@ -164,7 +145,6 @@ categories = sales["category1"].dropna().unique()
 date_min, date_max = sales["date"].min(), sales["date"].max()
 
 # Dynamic filters based on view
-st.markdown('<div class="filters-container">', unsafe_allow_html=True)
 if st.session_state.current_view == 'branch':
     # Branch View - show all filters including branch
     col1, col2, col3 = st.columns(3)
@@ -185,12 +165,11 @@ else:
 
 col_from, col_to = st.columns(2)
 with col_from:
-    st.markdown("<div style='background: linear-gradient(135deg, #7b38d8, #5e2ba8); color:white; padding:10px; font-weight:bold; border-radius:8px; text-align:center;'>From</div>", unsafe_allow_html=True)
+    st.markdown("<div style='background-color:#7b38d8; color:white; padding:8px; font-weight:bold;'>From</div>", unsafe_allow_html=True)
     start_date = st.date_input("", value=date_min, min_value=date_min, max_value=date_max, key="from_date")
 with col_to:
-    st.markdown("<div style='background: linear-gradient(135deg, #7b38d8, #5e2ba8); color:white; padding:10px; font-weight:bold; border-radius:8px; text-align:center;'>To</div>", unsafe_allow_html=True)
+    st.markdown("<div style='background-color:#7b38d8; color:white; padding:8px; font-weight:bold;'>To</div>", unsafe_allow_html=True)
     end_date = st.date_input("", value=date_max, min_value=date_min, max_value=date_max, key="to_date")
-st.markdown('</div>', unsafe_allow_html=True)
 
 # === APPLY FILTERS ===
 filtered = sales.copy()
@@ -216,43 +195,29 @@ total_working_days = working_days_excl_sundays(month_start, month_end)
 
 # === AGGREGATIONS ===
 if st.session_state.current_view == 'general':
-    # For general view, aggregate by cluster and category or just category if "All" clusters
-    if selected_cluster == "All":
-        # Sum all clusters for each category
-        mtd_agg = filtered.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-        mtd_agg['Cluster'] = 'All Clusters'
-        daily_achieved = filtered[filtered['date'] == end_dt].groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
-        daily_achieved['Cluster'] = 'All Clusters'
-    else:
-        # Show by cluster and category
-        mtd_agg = filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-        daily_achieved = filtered[filtered['date'] == end_dt].groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+    # For general view, aggregate by cluster and category instead of branch and category
+    mtd_agg = filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
     
-    # Get total paints target for the chosen month - sum all branches for paints category
-    paints_target = targets[targets['category1'].str.lower() == 'paints']['amount'].sum()
-    targets_general = pd.DataFrame({'category1': ['paints'], 'monthly_target': [paints_target]})
+    # Adjust targets for general view - aggregate by cluster
+    targets_general = targets.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
     
     prev_year_filtered = prev_year_sales[
         (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
         (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
     ]
-    # Apply same filters to prev_year_sales
+    # Apply same cluster filter to prev_year_sales if needed
     if selected_cluster != "All":
         prev_year_filtered = prev_year_filtered[prev_year_filtered["cluster"] == selected_cluster]
     if selected_category != "All":
         prev_year_filtered = prev_year_filtered[prev_year_filtered["category1"] == selected_category]
     
-    if selected_cluster == "All":
-        # Sum all clusters for previous year
-        pym_agg = prev_year_filtered.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
-        pym_agg['Cluster'] = 'All Clusters'
-    else:
-        pym_agg = prev_year_filtered.groupby(['cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym', 'cluster': 'Cluster'})
+    pym_agg = prev_year_filtered.groupby(['cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym', 'cluster': 'Cluster'})
     
     # Merge data for general view
     df = mtd_agg.merge(daily_achieved, on=['Cluster', 'category1'], how='left')
     
-    # For targets, match with paints category
+    # For targets, we need to match each cluster-category combination with the category target
     df = df.merge(targets_general, on=['category1'], how='left')
     df = df.merge(pym_agg, on=['Cluster', 'category1'], how='left')
     
@@ -304,72 +269,44 @@ df.rename(columns={
 
 # === KPI CALCULATIONS ===
 kpi1 = df['MTD Act.'].sum()
-# Use paints target for KPI2 to match table totals logic
-paints_kpi_row = df[df['category1'].str.lower() == 'paints']
-kpi2 = paints_kpi_row['Monthly TGT'].values[0] if not paints_kpi_row.empty else 0
+kpi2 = df['Monthly TGT'].sum()
 kpi3 = df['Daily Achieved'].sum()
 kpi4 = df['Projected landing'].sum()
 
-# === ENHANCED KPI STYLES ===
+# === STYLES ===
 st.markdown("""
 <style>
 .kpi-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px;
-    margin: 20px 0;
+    gap: 16px;
+    margin-top: 10px;
     justify-content: space-between;
-    background: linear-gradient(135deg, #f8f9ff, #ffffff);
-    padding: 25px;
-    border-radius: 15px;
-    box-shadow: 0 8px 25px rgba(123, 56, 216, 0.1);
 }
 .kpi-box {
-    flex: 1 1 calc(20% - 20px);
-    background: linear-gradient(135deg, #ffffff, #f8f9ff);
-    border: 2px solid transparent;
-    background-clip: padding-box;
-    border-radius: 15px;
-    padding: 20px;
-    min-width: 180px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-.kpi-box::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(135deg, #7b38d8, #3FA0A3);
-}
-.kpi-box:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 30px rgba(123, 56, 216, 0.15);
+    flex: 1 1 calc(20% - 16px);
+    background-color: #f7f7fb;
+    border-left: 6px solid #7b38d8;
+    border-radius: 10px;
+    padding: 16px;
+    min-width: 150px;
+    box-shadow: 1px 1px 4px rgba(0,0,0,0.05);
 }
 .kpi-box h4 {
-    margin: 0 0 10px 0;
+    margin: 0;
     font-size: 14px;
-    color: #666;
+    color: #555;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
 }
 .kpi-box p {
-    margin: 0;
-    font-size: 28px;
+    margin: 5px 0 0 0;
+    font-size: 22px;
     font-weight: bold;
-    background: linear-gradient(135deg, #7b38d8, #3FA0A3);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #222;
 }
 @media only screen and (max-width: 768px) {
     .kpi-box {
-        flex: 1 1 calc(48% - 20px);
+        flex: 1 1 calc(48% - 16px);
     }
 }
 </style>
@@ -402,21 +339,19 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # === SALES VS TARGET CHART ===
-st.markdown('<div class="chart-container">', unsafe_allow_html=True)
 chart_title = "📊 Sales vs Monthly Target (MTD)" + (" - General View" if st.session_state.current_view == 'general' else " - Branch View")
 st.markdown(f"### {chart_title}")
 df_chart = df.copy()
 x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
 
 fig = go.Figure([
-    go.Bar(x=x_labels, y=df_chart['MTD Act.'], name='MTD Achieved', marker_color='#FF8C00'),
-    go.Bar(x=x_labels, y=df_chart['Monthly TGT'], name='Monthly Target', marker_color='#4682B4')
+    go.Bar(x=x_labels, y=df_chart['MTD Act.'], name='MTD Achieved', marker_color='orange'),
+    go.Bar(x=x_labels, y=df_chart['Monthly TGT'], name='Monthly Target', marker_color='steelblue')
 ])
 fig.update_layout(barmode='group', xaxis_tickangle=-45,
                   height=500, margin=dict(b=150),
                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig, use_container_width=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
 # === AGGRID DISPLAY with Totals Row ===
 df_display = df.copy()
@@ -531,12 +466,10 @@ function(params) {
 
 st.markdown("<style>.ag-theme-material .ag-cell{text-align:center !important;}</style>", unsafe_allow_html=True)
 
-st.markdown('<div class="table-container">', unsafe_allow_html=True)
 table_title = f"### <center>📋 <span style='font-size:22px; font-weight:bold; color:#7b38d8;'>PERFORMANCE TABLE - {current_view_display}</span></center>"
 st.markdown(table_title, unsafe_allow_html=True)
 AgGrid(df_display, gridOptions=gb.build(), enable_enterprise_modules=False,
        allow_unsafe_jscode=True, theme="material", height=500, fit_columns_on_grid_load=False, reload_data=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
 # === EXCEL DOWNLOAD ===
 df_excel = df_display.drop(columns=['is_totals', '::auto_unique_id::'], errors='ignore').copy()
