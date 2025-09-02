@@ -16,11 +16,14 @@ st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard"
 # === STYLES ===
 st.markdown("""
     <style>
+        /* Container */
         .main .block-container {
             max-width: 1400px;
             padding: 2rem 2rem;
             margin: auto;
         }
+
+        /* Banner */
         .banner {
             width: 100%;
             background-color: #3FA0A3;
@@ -42,30 +45,71 @@ st.markdown("""
             font-weight: bold;
             margin: 0;
         }
+
+        /* Table Header */
         .ag-theme-material .ag-header {
             background-color: #7b38d8 !important;
             color: white !important;
             font-weight: bold !important;
         }
+
+        /* Center Dashboard View title */
+        .dashboard-view-title {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+
+        /* View Selector container */
         .view-selector {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
             justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: nowrap;
         }
+
+        /* Buttons styled as cards */
         .view-button {
-            padding: 10px 20px;
+            padding: 15px 30px;
             border: 2px solid #7b38d8;
-            border-radius: 8px;
+            border-radius: 12px;
             background-color: white;
             color: #7b38d8;
-            font-weight: bold;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.3s;
+            box-shadow: 0 3px 8px rgba(123, 56, 216, 0.2);
+            transition: all 0.3s ease;
+            min-width: 140px;
+            text-align: center;
+            user-select: none;
+        }
+        .view-button:hover {
+            background-color: #7b38d8;
+            color: white;
+            box-shadow: 0 5px 15px rgba(123, 56, 216, 0.4);
         }
         .view-button.active {
             background-color: #7b38d8;
             color: white;
+            box-shadow: 0 5px 15px rgba(123, 56, 216, 0.6);
+        }
+
+        /* Responsive: On smaller screens (mobile), stack buttons in one horizontal scrollable row */
+        @media (max-width: 600px) {
+            .view-selector {
+                justify-content: flex-start;
+                gap: 12px;
+                overflow-x: auto;
+                padding-left: 10px;
+            }
+            .view-button {
+                min-width: 120px;
+                padding: 12px 18px;
+                font-size: 0.9rem;
+                flex-shrink: 0;
+            }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -91,12 +135,16 @@ else:
     st.error("⚠️ Failed to load logo image.")
 
 # === VIEW SELECTOR ===
-st.markdown("### 🧭 Dashboard View")
-view_col1, view_col2 = st.columns(2)
+st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
+
+# Wrap buttons in a div with view-selector class for flex styling
+st.markdown('<div class="view-selector">', unsafe_allow_html=True)
+view_col1, view_col2 = st.columns([1,1])
 with view_col1:
-    branch_view = st.button("🏢 Detailed View", use_container_width=True)
+    branch_view = st.button("🏢 Detailed View", key="branch_view", use_container_width=True)
 with view_col2:
-    general_view = st.button("🌐 General View", use_container_width=True)
+    general_view = st.button("🌐 General View", key="general_view", use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # Initialize session state for view
 if 'current_view' not in st.session_state:
@@ -107,9 +155,16 @@ if branch_view:
 elif general_view:
     st.session_state.current_view = 'general'
 
-# Display current view
+# Display current view with custom styling using markdown and CSS
+active_class_branch = "view-button active" if st.session_state.current_view == 'branch' else "view-button"
+active_class_general = "view-button active" if st.session_state.current_view == 'general' else "view-button"
+
+# To visually reflect the active state, you can alternatively replace buttons by clickable divs, 
+# but Streamlit buttons are a bit limited to fully style here. 
+# So keep the buttons and add a markdown showing current view nicely:
+
 current_view_display = "🏢 Detailed View" if st.session_state.current_view == 'branch' else "🌐 General View"
-st.markdown(f"**Current View:** {current_view_display}")
+st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
 
 # === LOAD DATA ===
 file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
