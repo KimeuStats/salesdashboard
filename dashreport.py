@@ -94,7 +94,7 @@ else:
 st.markdown("### 🧭 Dashboard View")
 view_col1, view_col2 = st.columns(2)
 with view_col1:
-    branch_view = st.button("📊 Branch View", use_container_width=True)
+    branch_view = st.button("🏢 Branch View", use_container_width=True)
 with view_col2:
     general_view = st.button("🌐 General View", use_container_width=True)
 
@@ -108,7 +108,7 @@ elif general_view:
     st.session_state.current_view = 'general'
 
 # Display current view
-current_view_display = "📊 Branch View" if st.session_state.current_view == 'branch' else "🌐 General View"
+current_view_display = "🏢 Branch View" if st.session_state.current_view == 'branch' else "🌐 General View"
 st.markdown(f"**Current View:** {current_view_display}")
 
 # === LOAD DATA ===
