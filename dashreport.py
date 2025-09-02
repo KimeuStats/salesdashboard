@@ -269,16 +269,13 @@ df.rename(columns={
 
 # === KPI CALCULATIONS ===
 kpi1 = df['MTD Act.'].sum()
-if st.session_state.current_view == 'general':
-    # Use Monthly Target from "Paints" row
-    paints_row = df[df['category1'].str.lower() == 'paints']
-    if not paints_row.empty:
-        kpi2 = paints_row['Monthly TGT'].values[0]
-    else:
-        kpi2 = 0
+# Always get Monthly Target from 'Paints' row only, for both views
+paints_row = df[df['category1'].str.lower() == 'paints']
+if not paints_row.empty:
+    kpi2 = paints_row['Monthly TGT'].values[0]
 else:
-    # In branch view, sum all
-    kpi2 = df['Monthly TGT'].sum()
+    kpi2 = 0
+
 
 kpi3 = df['Daily Achieved'].sum()
 kpi4 = df['Projected landing'].sum()
