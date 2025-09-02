@@ -339,7 +339,7 @@ st.markdown(f"""
         <p>{kpi1:,.0f}</p>
     </div>
     <div class="kpi-box">
-        <h4>🎯 Monthly Target</h4>
+        <h4>🚀 Monthly Target</h4>
         <p>{kpi2:,.0f}</p>
     </div>
     <div class="kpi-box">
@@ -351,14 +351,14 @@ st.markdown(f"""
         <p>{kpi4:,.0f}</p>
     </div>
     <div class="kpi-box">
-        <h4>💼 Days Worked</h4>
+        <h4>⌛ Days Worked</h4>
         <p>{days_worked} / {total_working_days}</p>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 # === SALES VS TARGET CHART ===
-chart_title = "📊 Sales vs Monthly Target (MTD)" + (" - General View" if st.session_state.current_view == 'general' else " - Branch View")
+chart_title = "📊 Sales vs Monthly Target (MTD)" + (" - General View" if st.session_state.current_view == 'general' else " - Detailed View")
 st.markdown(f"### {chart_title}")
 df_chart = df.copy()
 x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
