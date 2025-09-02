@@ -454,22 +454,26 @@ percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', '
 def safe_div(n, d):
     return (n - d) / d if d else 0
 
-if selected_category.lower() == 'paints':
-    # Get the Paints row (expect one row)
-    paints_row = df_display[df_display['category1'].str.lower() == 'paints']
+# Normalize category filter to lower and strip spaces
+selected_cat = selected_category.strip().lower()
+
+if selected_cat == 'paints':
+    # Find paints row robustly
+    paints_row = df_display[df_display['category1'].str.lower().str.strip() == 'paints']
+
     if paints_row.empty:
         st.warning("⚠️ 'Paints' row not found — totals may be inaccurate.")
         paints_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
     else:
         paints_values = {
-            'Monthly TGT': paints_row['Monthly TGT'].values[0],
-            'Daily Tgt': paints_row['Daily Tgt'].values[0],
-            'MTD TGT': paints_row['MTD TGT'].values[0],
-            'PYM': paints_row['PYM'].values[0]
+            'Monthly TGT': paints_row['Monthly TGT'].fillna(0).values[0],
+            'Daily Tgt': paints_row['Daily Tgt'].fillna(0).values[0],
+            'MTD TGT': paints_row['MTD TGT'].fillna(0).values[0],
+            'PYM': paints_row['PYM'].fillna(0).values[0]
         }
-    
-    # Sum actuals for all rows in the df_display
-    actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
+
+    # Sum actuals from all rows in df_display (or filter as needed)
+    actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].fillna(0).sum()
 
     totals = {
         'branch': 'Totals',
@@ -490,10 +494,16 @@ if selected_category.lower() == 'paints':
     }
 
 else:
-    # For other categories (including Waterproofing), sum targets & actuals for that category in df_display
-    cat_rows = df_display[df_display['category1'].str.lower() == selected_category.lower()]
-    target_sums = cat_rows[['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']].sum()
-    actual_sums = cat_rows[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
+    # Filter rows matching selected category (case-insensitive + strip)
+    cat_rows = df_display[df_display['category1'].str.lower().str.strip() == selected_cat]
+
+    if cat_rows.empty:
+        st.warning(f"⚠️ No rows found for category '{selected_category}'. Totals will be zero.")
+        target_sums = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
+        actual_sums = {col: 0 for col in ['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']}
+    else:
+        target_sums = cat_rows[['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']].fillna(0).sum()
+        actual_sums = cat_rows[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].fillna(0).sum()
 
     totals = {
         'branch': 'Totals',
@@ -513,10 +523,9 @@ else:
         'is_totals': True
     }
 
-# Append the totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 
-# Formatting percentages
+# Format percentages
 for col in percent_cols:
     df_display[col] = (df_display[col].astype(float) * 100).round(1)
 
