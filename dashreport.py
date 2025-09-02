@@ -47,6 +47,19 @@ st.markdown("""
             color: white !important;
             font-weight: bold !important;
         }
+        .view-button {
+            background-color: #7b38d8;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .view-button.active {
+            background-color: #5a2aa3;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -98,19 +111,39 @@ targets_agg = targets.groupby(['branch', 'category1'], as_index=False)['amount']
 def working_days_excl_sundays(start_date, end_date):
     return len([d for d in pd.date_range(start=start_date, end=end_date) if d.weekday() != 6])
 
+# === VIEW SELECTION ===
+view_option = st.radio(
+    "Select View:",
+    ["General View (All Clusters)", "Detailed View (Filter by Cluster/Branch)"],
+    horizontal=True,
+    index=1
+)
+
 # === FILTERS ===
 clusters = sales["Cluster"].dropna().unique()
 branches = sales["branch"].dropna().unique()
 categories = sales["category1"].dropna().unique()
 date_min, date_max = sales["date"].min(), sales["date"].max()
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
-with col2:
-    selected_branch = st.selectbox("Branch", options=["All"] + list(branches))
-with col3:
-    selected_category = st.selectbox("Category", options=["All"] + list(categories))
+if view_option == "General View (All Clusters)":
+    # For general view, don't show cluster and branch filters
+    selected_cluster = "All"
+    selected_branch = "All"
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_category = st.selectbox("Category", options=["All"] + list(categories))
+    with col2:
+        pass  # Empty column for layout
+else:
+    # For detailed view, show all filters
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
+    with col2:
+        selected_branch = st.selectbox("Branch", options=["All"] + list(branches))
+    with col3:
+        selected_category = st.selectbox("Category", options=["All"] + list(categories))
 
 col_from, col_to = st.columns(2)
 with col_from:
@@ -143,19 +176,43 @@ days_worked = working_days_excl_sundays(month_start, end_dt)
 total_working_days = working_days_excl_sundays(month_start, month_end)
 
 # === AGGREGATIONS ===
-mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+# For general view, group by category only
+if view_option == "General View (All Clusters)":
+    mtd_agg = filtered.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
 
-prev_year_filtered = prev_year_sales[
-    (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
-    (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
-]
-pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+    prev_year_filtered = prev_year_sales[
+        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+    ]
+    pym_agg = prev_year_filtered.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+    
+    # For general view, sum targets across all branches
+    targets_agg_general = targets.groupby(['category1'], as_index=False)['monthly_target'].sum()
+    
+    df = (mtd_agg.merge(daily_achieved, on=['category1'], how='left')
+             .merge(targets_agg_general, on=['category1'], how='left')
+             .merge(pym_agg, on=['category1'], how='left'))
+    df.fillna(0, inplace=True)
+    
+    # Add empty branch column for consistency
+    df['branch'] = 'All Branches'
+    
+else:
+    # For detailed view, use the original grouping
+    mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
 
-df = (mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left')
-         .merge(targets_agg, on=['branch', 'category1'], how='left')
-         .merge(pym_agg, on=['branch', 'category1'], how='left'))
-df.fillna(0, inplace=True)
+    prev_year_filtered = prev_year_sales[
+        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+    ]
+    pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+
+    df = (mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left')
+             .merge(targets_agg, on=['branch', 'category1'], how='left')
+             .merge(pym_agg, on=['branch', 'category1'], how='left'))
+    df.fillna(0, inplace=True)
 
 df['daily_tgt'] = np.where(total_working_days>0, df['monthly_target']/total_working_days, 0)
 df['achieved_vs_daily_tgt'] = np.where(df['daily_tgt']>0, (df['daily_achieved'] - df['daily_tgt']) / df['daily_tgt'], 0)
@@ -186,7 +243,6 @@ kpi1 = df['MTD Act.'].sum()
 kpi2 = df['Monthly TGT'].sum()
 kpi3 = df['Daily Achieved'].sum()
 kpi4 = df['Projected landing'].sum()
-
 
 days_worked = working_days_excl_sundays(month_start, end_dt)
 total_working_days = working_days_excl_sundays(month_start, month_end)
@@ -259,7 +315,11 @@ st.markdown(f"""
 # === SALES VS TARGET CHART ===
 st.markdown("### 📊 Sales vs Monthly Target (MTD)")
 df_chart = df.copy()
-x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
+
+if view_option == "General View (All Clusters)":
+    x_labels = df_chart['category1']
+else:
+    x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
 
 fig = go.Figure([
     go.Bar(x=x_labels, y=df_chart['MTD Act.'], name='MTD Achieved', marker_color='orange'),
@@ -270,7 +330,6 @@ fig.update_layout(barmode='group', xaxis_tickangle=-45,
                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig, use_container_width=True)
 
-# === AGGRID DISPLAY with Totals Row ===
 # === AGGRID DISPLAY with Totals Row ===
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
@@ -283,10 +342,10 @@ if paints_row.empty:
     paints_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
 else:
     paints_values = {
-        'Monthly TGT': paints_row['Monthly TGT'].values[0],
-        'Daily Tgt': paints_row['Daily Tgt'].values[0],
-        'MTD TGT': paints_row['MTD TGT'].values[0],
-        'PYM': paints_row['PYM'].values[0]
+        'Monthly TGT': paints_row['Monthly TGT'].sum(),
+        'Daily Tgt': paints_row['Daily Tgt'].sum(),
+        'MTD TGT': paints_row['MTD TGT'].sum(),
+        'PYM': paints_row['PYM'].sum()
     }
 
 # 2. Sum actuals
@@ -323,7 +382,6 @@ for col in df_display.columns:
     if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
         df_display[col] = df_display[col].round(1)
 
-# AgGrid setup
 # AgGrid setup
 gb = GridOptionsBuilder.from_dataframe(df_display)
 gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
@@ -390,7 +448,7 @@ AgGrid(df_display, gridOptions=gb.build(), enable_enterprise_modules=False,
        allow_unsafe_jscode=True, theme="material", height=500, fit_columns_on_grid_load=False, reload_data=True)
 
 # === EXCEL DOWNLOAD ===
-df_excel = df_display.drop(columns=['is_totals', '::auto_unique_id::'], errors='ignore').copy()
+df_excel = df_display.drop(columns=['is_totals'], errors='ignore').copy()
 for col in percent_cols:
     df_excel[col] = df_excel[col] / 100  # revert to decimal for Excel
 
