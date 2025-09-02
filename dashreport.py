@@ -268,16 +268,18 @@ df.rename(columns={
 }, inplace=True)
 
 # === KPI CALCULATIONS ===
+current_view = st.session_state.current_view
+current_branch = selected_branch if current_view == 'branch' else None
+
 kpi1 = df['MTD Act.'].sum()
 
-# Always get Monthly Target from sum of 'Paints' rows only, for both views
-if view == 'branch':
-    # Monthly Target = sum of paints rows in this branch only
-    paints_rows = df[(df['category1'].str.lower() == 'paints') & (df['branch'] == current_branch)]
+if current_view == 'branch':
+    if current_branch and current_branch != "All":
+        paints_rows = df[(df['category1'].str.lower() == 'paints') & (df['branch'] == current_branch)]
+    else:
+        paints_rows = df[df['category1'].str.lower() == 'paints']
     kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
-
-elif view == 'general':
-    # Monthly Target = sum of paints rows across all branches
+else:
     paints_rows = df[df['category1'].str.lower() == 'paints']
     kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
 
