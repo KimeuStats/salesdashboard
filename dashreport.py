@@ -451,88 +451,53 @@ st.plotly_chart(fig, use_container_width=True)
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-def safe_div(n, d):
-    return (n - d) / d if d else 0
+# 1. Get Paints row (case-insensitive)
+paints_row = df_display[df_display['category1'].str.lower() == 'paints']
 
-# Normalize category filter to lower and strip spaces
-selected_cat = selected_category.strip().lower()
-
-if selected_cat == 'paints':
-    # Find paints row robustly
-    paints_row = df_display[df_display['category1'].str.lower().str.strip() == 'paints']
-
-    if paints_row.empty:
-        st.warning("⚠️ 'Paints' row not found — totals may be inaccurate.")
-        paints_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
-    else:
-        paints_values = {
-            'Monthly TGT': paints_row['Monthly TGT'].fillna(0).values[0],
-            'Daily Tgt': paints_row['Daily Tgt'].fillna(0).values[0],
-            'MTD TGT': paints_row['MTD TGT'].fillna(0).values[0],
-            'PYM': paints_row['PYM'].fillna(0).values[0]
-        }
-
-    # Sum actuals from all rows in df_display (or filter as needed)
-    actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].fillna(0).sum()
-
-    totals = {
-        'branch': 'Totals',
-        'category1': 'Paints',
-        'Monthly TGT': paints_values['Monthly TGT'],
-        'Daily Tgt': paints_values['Daily Tgt'],
-        'MTD TGT': paints_values['MTD TGT'],
-        'PYM': paints_values['PYM'],
-        'Daily Achieved': actual_sums['Daily Achieved'],
-        'MTD Act.': actual_sums['MTD Act.'],
-        'Projected landing': actual_sums['Projected landing'],
-        'CM': actual_sums['CM'],
-        'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], paints_values['Daily Tgt']),
-        'MTD Var': safe_div(actual_sums['MTD Act.'], paints_values['MTD TGT']),
-        'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], paints_values['Monthly TGT']),
-        'CM VS PYM': safe_div(actual_sums['CM'], paints_values['PYM']),
-        'is_totals': True
-    }
-
+if paints_row.empty:
+    st.warning("⚠️ 'Paints' row not found — totals may be inaccurate.")
+    paints_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
 else:
-    # Filter rows matching selected category (case-insensitive + strip)
-    cat_rows = df_display[df_display['category1'].str.lower().str.strip() == selected_cat]
-
-    if cat_rows.empty:
-        st.warning(f"⚠️ No rows found for category '{selected_category}'. Totals will be zero.")
-        target_sums = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
-        actual_sums = {col: 0 for col in ['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']}
-    else:
-        target_sums = cat_rows[['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']].fillna(0).sum()
-        actual_sums = cat_rows[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].fillna(0).sum()
-
-    totals = {
-        'branch': 'Totals',
-        'category1': selected_category,
-        'Monthly TGT': target_sums['Monthly TGT'],
-        'Daily Tgt': target_sums['Daily Tgt'],
-        'MTD TGT': target_sums['MTD TGT'],
-        'PYM': target_sums['PYM'],
-        'Daily Achieved': actual_sums['Daily Achieved'],
-        'MTD Act.': actual_sums['MTD Act.'],
-        'Projected landing': actual_sums['Projected landing'],
-        'CM': actual_sums['CM'],
-        'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], target_sums['Daily Tgt']),
-        'MTD Var': safe_div(actual_sums['MTD Act.'], target_sums['MTD TGT']),
-        'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], target_sums['Monthly TGT']),
-        'CM VS PYM': safe_div(actual_sums['CM'], target_sums['PYM']),
-        'is_totals': True
+    paints_values = {
+        'Monthly TGT': paints_row['Monthly TGT'].values[0],
+        'Daily Tgt': paints_row['Daily Tgt'].values[0],
+        'MTD TGT': paints_row['MTD TGT'].values[0],
+        'PYM': paints_row['PYM'].values[0]
     }
 
+# 2. Sum actuals
+actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
+
+# 3. Calculate percentages
+def safe_div(n, d): return (n - d) / d if d else 0
+
+totals = {
+    'branch': 'Totals',
+    'category1': '',
+    'Monthly TGT': paints_values['Monthly TGT'],
+    'Daily Tgt': paints_values['Daily Tgt'],
+    'MTD TGT': paints_values['MTD TGT'],
+    'PYM': paints_values['PYM'],
+    'Daily Achieved': actual_sums['Daily Achieved'],
+    'MTD Act.': actual_sums['MTD Act.'],
+    'Projected landing': actual_sums['Projected landing'],
+    'CM': actual_sums['CM'],
+    'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], paints_values['Daily Tgt']),
+    'MTD Var': safe_div(actual_sums['MTD Act.'], paints_values['MTD TGT']),
+    'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], paints_values['Monthly TGT']),
+    'CM VS PYM': safe_div(actual_sums['CM'], paints_values['PYM']),
+    'is_totals': True
+}
+
+# 4. Append Totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 
-# Format percentages
+# Formatting
 for col in percent_cols:
     df_display[col] = (df_display[col].astype(float) * 100).round(1)
-
 for col in df_display.columns:
     if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
         df_display[col] = df_display[col].round(1)
-
 
 # AgGrid setup
 gb = GridOptionsBuilder.from_dataframe(df_display)
