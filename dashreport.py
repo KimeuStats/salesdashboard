@@ -91,7 +91,7 @@ else:
     st.error("⚠️ Failed to load logo image.")
 
 # === VIEW SELECTOR ===
-st.markdown("### 🎯 Dashboard View")
+st.markdown("### 🧭 Dashboard View")
 view_col1, view_col2 = st.columns(2)
 with view_col1:
     branch_view = st.button("📊 Branch View", use_container_width=True)
