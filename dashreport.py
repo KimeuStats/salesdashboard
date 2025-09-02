@@ -206,7 +206,13 @@ if st.session_state.current_view == 'general':
         (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
         (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
     ]
-    pym_agg = prev_year_filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+    # Apply same cluster filter to prev_year_sales if needed
+    if selected_cluster != "All":
+        prev_year_filtered = prev_year_filtered[prev_year_filtered["cluster"] == selected_cluster]
+    if selected_category != "All":
+        prev_year_filtered = prev_year_filtered[prev_year_filtered["category1"] == selected_category]
+    
+    pym_agg = prev_year_filtered.groupby(['cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym', 'cluster': 'Cluster'})
     
     # Merge data for general view
     df = mtd_agg.merge(daily_achieved, on=['Cluster', 'category1'], how='left')
