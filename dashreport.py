@@ -195,52 +195,58 @@ total_working_days = working_days_excl_sundays(month_start, month_end)
 
 # === AGGREGATIONS ===
 if st.session_state.current_view == 'general':
-    # For general view, aggregate by cluster and category instead of branch and category
+    # For general view, aggregate by Cluster and Category
     mtd_agg = filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
     daily_achieved = filtered[filtered['date'] == end_dt].groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
-    
-    # Adjust targets for general view - aggregate by cluster
-    targets_general = targets.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
-    
+
+    # Aggregate targets by Cluster and Category
+    targets_general = targets.groupby(['cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
+    targets_general = targets_general.rename(columns={'cluster': 'Cluster'})  # Match casing for merge
+
+    # Previous year sales aggregation
     prev_year_filtered = prev_year_sales[
         (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
         (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
     ]
-    # Apply same cluster filter to prev_year_sales if needed
     if selected_cluster != "All":
         prev_year_filtered = prev_year_filtered[prev_year_filtered["cluster"] == selected_cluster]
     if selected_category != "All":
         prev_year_filtered = prev_year_filtered[prev_year_filtered["category1"] == selected_category]
-    
+
     pym_agg = prev_year_filtered.groupby(['cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym', 'cluster': 'Cluster'})
-    
-    # Merge data for general view
-    df = mtd_agg.merge(daily_achieved, on=['Cluster', 'category1'], how='left')
-    
-    # For targets, we need to match each cluster-category combination with the category target
-    df = df.merge(targets_general, on=['category1'], how='left')
-    df = df.merge(pym_agg, on=['Cluster', 'category1'], how='left')
-    
+
+    # Merge all metrics into final DataFrame
+    df = (
+        mtd_agg
+        .merge(daily_achieved, on=['Cluster', 'category1'], how='left')
+        .merge(targets_general, on=['Cluster', 'category1'], how='left')
+        .merge(pym_agg, on=['Cluster', 'category1'], how='left')
+    )
     df.fillna(0, inplace=True)
-    
-    # Rename cluster column for consistency
+
+    # Rename for compatibility with rest of dashboard
     df = df.rename(columns={'Cluster': 'branch'})
-    
+
 else:
     # Original branch view logic
     mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
     daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
-    
+
     prev_year_filtered = prev_year_sales[
         (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
         (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
     ]
+
     pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
-    
-    df = (mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left')
-             .merge(targets_agg, on=['branch', 'category1'], how='left')
-             .merge(pym_agg, on=['branch', 'category1'], how='left'))
+
+    df = (
+        mtd_agg
+        .merge(daily_achieved, on=['branch', 'category1'], how='left')
+        .merge(targets_agg, on=['branch', 'category1'], how='left')
+        .merge(pym_agg, on=['branch', 'category1'], how='left')
+    )
     df.fillna(0, inplace=True)
+
 
 # === CALCULATIONS ===
 df['daily_tgt'] = np.where(total_working_days>0, df['monthly_target']/total_working_days, 0)
