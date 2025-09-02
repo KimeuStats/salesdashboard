@@ -195,15 +195,43 @@ total_working_days = working_days_excl_sundays(month_start, month_end)
 
 # === AGGREGATIONS ===
 if st.session_state.current_view == 'general':
-    # For general view, aggregate by Cluster and Category
-    mtd_agg = filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+    if selected_cluster == "All":
+        group_cols = ['category1']
+        cluster_label = 'All Clusters'
+    else:
+        group_cols = ['Cluster', 'category1']
 
-    # Aggregate targets by Cluster and Category
-    targets_general = targets.groupby(['cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
-    targets_general = targets_general.rename(columns={'cluster': 'Cluster'})  # Match casing for merge
+    # MTD Achieved
+    mtd_agg = (
+        filtered.groupby(group_cols, as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'mtd_achieved'})
+    )
 
-    # Previous year sales aggregation
+    # Daily Achieved
+    daily_achieved = (
+        filtered[filtered['date'] == end_dt]
+        .groupby(group_cols, as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'daily_achieved'})
+    )
+
+    # Monthly Targets
+    if selected_cluster == "All":
+        targets_general = (
+            targets.groupby(['category1'], as_index=False)['amount']
+            .sum()
+            .rename(columns={'amount': 'monthly_target'})
+        )
+    else:
+        targets_general = (
+            targets[targets['cluster'] == selected_cluster]
+            .groupby(['cluster', 'category1'], as_index=False)['amount']
+            .sum()
+            .rename(columns={'amount': 'monthly_target', 'cluster': 'Cluster'})
+        )
+
+    # Previous Year Sales
     prev_year_filtered = prev_year_sales[
         (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
         (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
@@ -213,31 +241,55 @@ if st.session_state.current_view == 'general':
     if selected_category != "All":
         prev_year_filtered = prev_year_filtered[prev_year_filtered["category1"] == selected_category]
 
-    pym_agg = prev_year_filtered.groupby(['cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym', 'cluster': 'Cluster'})
+    pym_agg = (
+        prev_year_filtered
+        .groupby(group_cols, as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'pym'})
+    )
+    if selected_cluster != "All":
+        pym_agg = pym_agg.rename(columns={'cluster': 'Cluster'})
 
-    # Merge all metrics into final DataFrame
+    # Merge all
     df = (
         mtd_agg
-        .merge(daily_achieved, on=['Cluster', 'category1'], how='left')
-        .merge(targets_general, on=['Cluster', 'category1'], how='left')
-        .merge(pym_agg, on=['Cluster', 'category1'], how='left')
+        .merge(daily_achieved, on=group_cols, how='left')
+        .merge(targets_general, on=['category1'] if selected_cluster == "All" else ['Cluster', 'category1'], how='left')
+        .merge(pym_agg, on=group_cols, how='left')
     )
     df.fillna(0, inplace=True)
 
-    # Rename for compatibility with rest of dashboard
-    df = df.rename(columns={'Cluster': 'branch'})
+    # Rename for consistency
+    if selected_cluster == "All":
+        df['branch'] = cluster_label  # one row per category
+    else:
+        df = df.rename(columns={'Cluster': 'branch'})  # show cluster in branch col
 
 else:
-    # Original branch view logic
-    mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+    # === Original Branch View ===
+    mtd_agg = (
+        filtered.groupby(['branch', 'category1'], as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'mtd_achieved'})
+    )
+    daily_achieved = (
+        filtered[filtered['date'] == end_dt]
+        .groupby(['branch', 'category1'], as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'daily_achieved'})
+    )
 
     prev_year_filtered = prev_year_sales[
         (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
         (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
     ]
 
-    pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+    pym_agg = (
+        prev_year_filtered
+        .groupby(['branch', 'category1'], as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'pym'})
+    )
 
     df = (
         mtd_agg
@@ -246,6 +298,7 @@ else:
         .merge(pym_agg, on=['branch', 'category1'], how='left')
     )
     df.fillna(0, inplace=True)
+
 
 
 # === CALCULATIONS ===
