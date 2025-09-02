@@ -47,6 +47,26 @@ st.markdown("""
             color: white !important;
             font-weight: bold !important;
         }
+        .view-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+        .view-button {
+            padding: 10px 20px;
+            border: 2px solid #7b38d8;
+            border-radius: 8px;
+            background-color: white;
+            color: #7b38d8;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .view-button.active {
+            background-color: #7b38d8;
+            color: white;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -69,6 +89,27 @@ if logo_base64:
     """, unsafe_allow_html=True)
 else:
     st.error("⚠️ Failed to load logo image.")
+
+# === VIEW SELECTOR ===
+st.markdown("### 🎯 Dashboard View")
+view_col1, view_col2 = st.columns(2)
+with view_col1:
+    branch_view = st.button("📊 Branch View", use_container_width=True)
+with view_col2:
+    general_view = st.button("🌐 General View", use_container_width=True)
+
+# Initialize session state for view
+if 'current_view' not in st.session_state:
+    st.session_state.current_view = 'branch'
+
+if branch_view:
+    st.session_state.current_view = 'branch'
+elif general_view:
+    st.session_state.current_view = 'general'
+
+# Display current view
+current_view_display = "📊 Branch View" if st.session_state.current_view == 'branch' else "🌐 General View"
+st.markdown(f"**Current View:** {current_view_display}")
 
 # === LOAD DATA ===
 file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
@@ -93,7 +134,6 @@ for df in [sales, targets, prev_year_sales]:
 
 targets_agg = targets.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
 
-
 # === HELPER FUNCTION ===
 def working_days_excl_sundays(start_date, end_date):
     return len([d for d in pd.date_range(start=start_date, end=end_date) if d.weekday() != 6])
@@ -104,13 +144,24 @@ branches = sales["branch"].dropna().unique()
 categories = sales["category1"].dropna().unique()
 date_min, date_max = sales["date"].min(), sales["date"].max()
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
-with col2:
-    selected_branch = st.selectbox("Branch", options=["All"] + list(branches))
-with col3:
-    selected_category = st.selectbox("Category", options=["All"] + list(categories))
+# Dynamic filters based on view
+if st.session_state.current_view == 'branch':
+    # Branch View - show all filters including branch
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
+    with col2:
+        selected_branch = st.selectbox("Branch", options=["All"] + list(branches))
+    with col3:
+        selected_category = st.selectbox("Category", options=["All"] + list(categories))
+else:
+    # General View - no branch filter, cluster shows per category
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
+    with col2:
+        selected_category = st.selectbox("Category", options=["All"] + list(categories))
+    selected_branch = "All"  # Always set to All for general view
 
 col_from, col_to = st.columns(2)
 with col_from:
@@ -143,20 +194,49 @@ days_worked = working_days_excl_sundays(month_start, end_dt)
 total_working_days = working_days_excl_sundays(month_start, month_end)
 
 # === AGGREGATIONS ===
-mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+if st.session_state.current_view == 'general':
+    # For general view, aggregate by cluster and category instead of branch and category
+    mtd_agg = filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+    
+    # Adjust targets for general view - aggregate by cluster
+    targets_general = targets.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
+    
+    prev_year_filtered = prev_year_sales[
+        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+    ]
+    pym_agg = prev_year_filtered.groupby(['Cluster', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+    
+    # Merge data for general view
+    df = mtd_agg.merge(daily_achieved, on=['Cluster', 'category1'], how='left')
+    
+    # For targets, we need to match each cluster-category combination with the category target
+    df = df.merge(targets_general, on=['category1'], how='left')
+    df = df.merge(pym_agg, on=['Cluster', 'category1'], how='left')
+    
+    df.fillna(0, inplace=True)
+    
+    # Rename cluster column for consistency
+    df = df.rename(columns={'Cluster': 'branch'})
+    
+else:
+    # Original branch view logic
+    mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+    
+    prev_year_filtered = prev_year_sales[
+        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+    ]
+    pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
+    
+    df = (mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left')
+             .merge(targets_agg, on=['branch', 'category1'], how='left')
+             .merge(pym_agg, on=['branch', 'category1'], how='left'))
+    df.fillna(0, inplace=True)
 
-prev_year_filtered = prev_year_sales[
-    (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
-    (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
-]
-pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
-
-df = (mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left')
-         .merge(targets_agg, on=['branch', 'category1'], how='left')
-         .merge(pym_agg, on=['branch', 'category1'], how='left'))
-df.fillna(0, inplace=True)
-
+# === CALCULATIONS ===
 df['daily_tgt'] = np.where(total_working_days>0, df['monthly_target']/total_working_days, 0)
 df['achieved_vs_daily_tgt'] = np.where(df['daily_tgt']>0, (df['daily_achieved'] - df['daily_tgt']) / df['daily_tgt'], 0)
 df['mtd_tgt'] = df['daily_tgt'] * days_worked
@@ -186,10 +266,6 @@ kpi1 = df['MTD Act.'].sum()
 kpi2 = df['Monthly TGT'].sum()
 kpi3 = df['Daily Achieved'].sum()
 kpi4 = df['Projected landing'].sum()
-
-
-days_worked = working_days_excl_sundays(month_start, end_dt)
-total_working_days = working_days_excl_sundays(month_start, month_end)
 
 # === STYLES ===
 st.markdown("""
@@ -257,7 +333,8 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # === SALES VS TARGET CHART ===
-st.markdown("### 📊 Sales vs Monthly Target (MTD)")
+chart_title = "📊 Sales vs Monthly Target (MTD)" + (" - General View" if st.session_state.current_view == 'general' else " - Branch View")
+st.markdown(f"### {chart_title}")
 df_chart = df.copy()
 x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
 
@@ -270,7 +347,6 @@ fig.update_layout(barmode='group', xaxis_tickangle=-45,
                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig, use_container_width=True)
 
-# === AGGRID DISPLAY with Totals Row ===
 # === AGGRID DISPLAY with Totals Row ===
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
@@ -324,7 +400,6 @@ for col in df_display.columns:
         df_display[col] = df_display[col].round(1)
 
 # AgGrid setup
-# AgGrid setup
 gb = GridOptionsBuilder.from_dataframe(df_display)
 gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
 gb.configure_column("is_totals", hide=True)
@@ -352,7 +427,7 @@ for col in percent_cols:
         headerClass='header-center'
     )
 
-# 💡 Apply comma formatting to numeric (non-percentage) columns
+# Apply comma formatting to numeric (non-percentage) columns
 for col in df_display.columns:
     if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
         gb.configure_column(
@@ -385,7 +460,8 @@ function(params) {
 
 st.markdown("<style>.ag-theme-material .ag-cell{text-align:center !important;}</style>", unsafe_allow_html=True)
 
-st.markdown("### <center>📋 <span style='font-size:22px; font-weight:bold; color:#7b38d8;'>PERFORMANCE TABLE</span></center>", unsafe_allow_html=True)
+table_title = f"### <center>📋 <span style='font-size:22px; font-weight:bold; color:#7b38d8;'>PERFORMANCE TABLE - {current_view_display}</span></center>"
+st.markdown(table_title, unsafe_allow_html=True)
 AgGrid(df_display, gridOptions=gb.build(), enable_enterprise_modules=False,
        allow_unsafe_jscode=True, theme="material", height=500, fit_columns_on_grid_load=False, reload_data=True)
 
@@ -414,7 +490,11 @@ with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                 CellIsRule(operator='greaterThan', formula=['0'], fill=fill_pos))
 
 excel_buffer.seek(0)
+
+view_suffix = "_general_view" if st.session_state.current_view == 'general' else "_branch_view"
+filename = f"sales_dashboard{view_suffix}.xlsx"
+
 st.download_button(label="📥 Download Table as Excel",
                    data=excel_buffer,
-                   file_name="sales_dashboard_with_totals.xlsx",
+                   file_name=filename,
                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
