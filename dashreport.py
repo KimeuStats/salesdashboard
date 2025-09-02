@@ -47,19 +47,6 @@ st.markdown("""
             color: white !important;
             font-weight: bold !important;
         }
-        .view-button {
-            background-color: #7b38d8;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 10px;
-            font-weight: bold;
-        }
-        .view-button.active {
-            background-color: #5a2aa3;
-        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -106,17 +93,10 @@ for df in [sales, targets, prev_year_sales]:
 
 targets_agg = targets.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'monthly_target'})
 
+
 # === HELPER FUNCTION ===
 def working_days_excl_sundays(start_date, end_date):
     return len([d for d in pd.date_range(start=start_date, end=end_date) if d.weekday() != 6])
-
-# === VIEW SELECTION ===
-view_option = st.radio(
-    "Select View:",
-    ["General View (All Clusters)", "Detailed View (Filter by Cluster/Branch)"],
-    horizontal=True,
-    index=1
-)
 
 # === FILTERS ===
 clusters = sales["Cluster"].dropna().unique()
@@ -124,25 +104,13 @@ branches = sales["branch"].dropna().unique()
 categories = sales["category1"].dropna().unique()
 date_min, date_max = sales["date"].min(), sales["date"].max()
 
-if view_option == "General View (All Clusters)":
-    # For general view, don't show cluster and branch filters
-    selected_cluster = "All"
-    selected_branch = "All"
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_category = st.selectbox("Category", options=["All"] + list(categories))
-    with col2:
-        pass  # Empty column for layout
-else:
-    # For detailed view, show all filters
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
-    with col2:
-        selected_branch = st.selectbox("Branch", options=["All"] + list(branches))
-    with col3:
-        selected_category = st.selectbox("Category", options=["All"] + list(categories))
+col1, col2, col3 = st.columns(3)
+with col1:
+    selected_cluster = st.selectbox("Cluster", options=["All"] + list(clusters))
+with col2:
+    selected_branch = st.selectbox("Branch", options=["All"] + list(branches))
+with col3:
+    selected_category = st.selectbox("Category", options=["All"] + list(categories))
 
 col_from, col_to = st.columns(2)
 with col_from:
@@ -175,43 +143,19 @@ days_worked = working_days_excl_sundays(month_start, end_dt)
 total_working_days = working_days_excl_sundays(month_start, month_end)
 
 # === AGGREGATIONS ===
-# For general view, group by category only
-if view_option == "General View (All Clusters)":
-    mtd_agg = filtered.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
+daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
 
-    prev_year_filtered = prev_year_sales[
-        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
-        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
-    ]
-    pym_agg = prev_year_filtered.groupby(['category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
-    
-    # For general view, sum targets across all branches
-    targets_agg_general = targets.groupby(['category1'], as_index=False)['monthly_target'].sum()
-    
-    df = (mtd_agg.merge(daily_achieved, on=['category1'], how='left')
-             .merge(targets_agg_general, on=['category1'], how='left')
-             .merge(pym_agg, on=['category1'], how='left'))
-    df.fillna(0, inplace=True)
-    
-    # Add empty branch column for consistency
-    df['branch'] = 'All Branches'
-    
-else:
-    # For detailed view, use the original grouping
-    mtd_agg = filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'mtd_achieved'})
-    daily_achieved = filtered[filtered['date'] == end_dt].groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'daily_achieved'})
+prev_year_filtered = prev_year_sales[
+    (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+    (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+]
+pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
 
-    prev_year_filtered = prev_year_sales[
-        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
-        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
-    ]
-    pym_agg = prev_year_filtered.groupby(['branch', 'category1'], as_index=False)['amount'].sum().rename(columns={'amount': 'pym'})
-
-    df = (mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left')
-             .merge(targets_agg, on=['branch', 'category1'], how='left')
-             .merge(pym_agg, on=['branch', 'category1'], how='left'))
-    df.fillna(0, inplace=True)
+df = (mtd_agg.merge(daily_achieved, on=['branch', 'category1'], how='left')
+         .merge(targets_agg, on=['branch', 'category1'], how='left')
+         .merge(pym_agg, on=['branch', 'category1'], how='left'))
+df.fillna(0, inplace=True)
 
 df['daily_tgt'] = np.where(total_working_days>0, df['monthly_target']/total_working_days, 0)
 df['achieved_vs_daily_tgt'] = np.where(df['daily_tgt']>0, (df['daily_achieved'] - df['daily_tgt']) / df['daily_tgt'], 0)
@@ -238,144 +182,239 @@ df.rename(columns={
 }, inplace=True)
 
 # === KPI CALCULATIONS ===
-total_daily_achieved = df['Daily Achieved'].sum()
-total_mtd_achieved = df['MTD Act.'].sum()
-total_mtd_target = df['MTD TGT'].sum()
-total_monthly_target = df['Monthly TGT'].sum()
-total_projected_landing = df['Projected landing'].sum()
-total_prev_year = df['PYM'].sum()
+kpi1 = df['MTD Act.'].sum()
+kpi2 = df['Monthly TGT'].sum()
+kpi3 = df['Daily Achieved'].sum()
+kpi4 = df['Projected landing'].sum()
+
+
+days_worked = working_days_excl_sundays(month_start, end_dt)
+total_working_days = working_days_excl_sundays(month_start, month_end)
+
+# === STYLES ===
+st.markdown("""
+<style>
+.kpi-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 10px;
+    justify-content: space-between;
+}
+.kpi-box {
+    flex: 1 1 calc(20% - 16px);
+    background-color: #f7f7fb;
+    border-left: 6px solid #7b38d8;
+    border-radius: 10px;
+    padding: 16px;
+    min-width: 150px;
+    box-shadow: 1px 1px 4px rgba(0,0,0,0.05);
+}
+.kpi-box h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #555;
+    font-weight: 600;
+}
+.kpi-box p {
+    margin: 5px 0 0 0;
+    font-size: 22px;
+    font-weight: bold;
+    color: #222;
+}
+@media only screen and (max-width: 768px) {
+    .kpi-box {
+        flex: 1 1 calc(48% - 16px);
+    }
+}
+</style>
+""", unsafe_allow_html=True)
 
 # === KPI DISPLAY ===
-def kpi_card(title, value, delta=None, delta_color='green', width=1):
-    delta_html = ""
-    if delta is not None:
-        sign = "▲" if delta > 0 else "▼" if delta < 0 else ""
-        color = delta_color if delta > 0 else 'red' if delta < 0 else 'gray'
-        delta_html = f'<div style="font-size:14px; color:{color}; font-weight:bold;">{sign} {delta:.1%}</div>'
-    return f"""
-        <div style="background-color:#f0f2f6; padding:15px; margin:5px; border-radius:10px; text-align:center; flex: {width};">
-            <div style="font-size:18px; color:#555; font-weight:bold; margin-bottom:5px;">{title}</div>
-            <div style="font-size:24px; color:#7b38d8; font-weight:bold;">{value:,.0f}</div>
-            {delta_html}
-        </div>
-    """
+st.markdown(f"""
+<div class="kpi-grid">
+    <div class="kpi-box">
+        <h4>🏅 MTD Achieved</h4>
+        <p>{kpi1:,.0f}</p>
+    </div>
+    <div class="kpi-box">
+        <h4>🎯 Monthly Target</h4>
+        <p>{kpi2:,.0f}</p>
+    </div>
+    <div class="kpi-box">
+        <h4>📅 Daily Achieved</h4>
+        <p>{kpi3:,.0f}</p>
+    </div>
+    <div class="kpi-box">
+        <h4>📈 Projected Landing</h4>
+        <p>{kpi4:,.0f}</p>
+    </div>
+    <div class="kpi-box">
+        <h4>💼 Days Worked</h4>
+        <p>{days_worked} / {total_working_days}</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-col1, col2, col3, col4, col5, col6 = st.columns([1,1,1,1,1,1])
-col1.markdown(kpi_card("Daily Achieved", total_daily_achieved), unsafe_allow_html=True)
-col2.markdown(kpi_card("MTD Achieved", total_mtd_achieved), unsafe_allow_html=True)
-col3.markdown(kpi_card("MTD Target", total_mtd_target), unsafe_allow_html=True)
-col4.markdown(kpi_card("Monthly Target", total_monthly_target), unsafe_allow_html=True)
-col5.markdown(kpi_card("Projected Landing", total_projected_landing), unsafe_allow_html=True)
-col6.markdown(kpi_card("PYM", total_prev_year), unsafe_allow_html=True)
+# === SALES VS TARGET CHART ===
+st.markdown("### 📊 Sales vs Monthly Target (MTD)")
+df_chart = df.copy()
+x_labels = df_chart.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
 
-# === PLOTLY BAR CHART ===
-if view_option == "General View (All Clusters)":
-    x = df['category1']
-else:
-    x = df.apply(lambda row: f"{row['branch']} - {row['category1']}", axis=1)
-
-trace_mtd = go.Bar(
-    x=x,
-    y=df['MTD Act.'],
-    name='MTD Achieved',
-    marker_color='purple'
-)
-
-trace_target = go.Bar(
-    x=x,
-    y=df['Monthly TGT'],
-    name='Monthly Target',
-    marker_color='pink'
-)
-
-layout = go.Layout(
-    title="Monthly Sales Achieved vs Target",
-    xaxis=dict(title='Category' if view_option=="General View (All Clusters)" else "Branch - Category", tickangle=45),
-    yaxis=dict(title='Amount'),
-    barmode='group',
-    height=400,
-    margin=dict(b=120)
-)
-
-fig = go.Figure(data=[trace_mtd, trace_target], layout=layout)
+fig = go.Figure([
+    go.Bar(x=x_labels, y=df_chart['MTD Act.'], name='MTD Achieved', marker_color='orange'),
+    go.Bar(x=x_labels, y=df_chart['Monthly TGT'], name='Monthly Target', marker_color='steelblue')
+])
+fig.update_layout(barmode='group', xaxis_tickangle=-45,
+                  height=500, margin=dict(b=150),
+                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig, use_container_width=True)
 
-# === AGGRID TABLE ===
-aggrid_columns = [
-    {"field": "branch", "headerName": "Branch", "hide": view_option == "General View (All Clusters)"},
-    {"field": "category1", "headerName": "Category"},
-    {"field": "Daily Tgt", "type": "numericColumn", "valueFormatter": {'function': "x.toLocaleString()"}},
-    {"field": "Daily Achieved", "type": "numericColumn", "valueFormatter": {'function': "x.toLocaleString()"}},
-    {"field": "Achieved vs Daily Tgt", "type": "numericColumn", "valueFormatter": {'function': "formatPercent(x)"}},
-    {"field": "MTD TGT", "type": "numericColumn", "valueFormatter": {'function': "x.toLocaleString()"}},
-    {"field": "MTD Act.", "type": "numericColumn", "valueFormatter": {'function': "x.toLocaleString()"}},
-    {"field": "MTD Var", "type": "numericColumn", "valueFormatter": {'function': "formatPercent(x)"}},
-    {"field": "Monthly TGT", "type": "numericColumn", "valueFormatter": {'function': "x.toLocaleString()"}},
-    {"field": "Achieved VS Monthly tgt", "type": "numericColumn", "valueFormatter": {'function': "formatPercent(x)"}},
-    {"field": "Projected landing", "type": "numericColumn", "valueFormatter": {'function': "x.toLocaleString()"}},
-    {"field": "PYM", "type": "numericColumn", "valueFormatter": {'function': "x.toLocaleString()"}},
-    {"field": "CM", "type": "numericColumn", "valueFormatter": {'function': "x.toLocaleString()"}},
-    {"field": "CM VS PYM", "type": "numericColumn", "valueFormatter": {'function': "formatPercent(x)"}},
-]
+# === AGGRID DISPLAY with Totals Row ===
+# === AGGRID DISPLAY with Totals Row ===
+df_display = df.copy()
+percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-js_code = JsCode("""
-    function formatPercent(params) {
-        if(params == null) return "";
-        return (params * 100).toFixed(1) + "%";
+# 1. Get Paints row (case-insensitive)
+paints_row = df_display[df_display['category1'].str.lower() == 'paints']
+
+if paints_row.empty:
+    st.warning("⚠️ 'Paints' row not found — totals may be inaccurate.")
+    paints_values = {col: 0 for col in ['Monthly TGT', 'Daily Tgt', 'MTD TGT', 'PYM']}
+else:
+    paints_values = {
+        'Monthly TGT': paints_row['Monthly TGT'].values[0],
+        'Daily Tgt': paints_row['Daily Tgt'].values[0],
+        'MTD TGT': paints_row['MTD TGT'].values[0],
+        'PYM': paints_row['PYM'].values[0]
     }
+
+# 2. Sum actuals
+actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
+
+# 3. Calculate percentages
+def safe_div(n, d): return (n - d) / d if d else 0
+
+totals = {
+    'branch': 'Totals',
+    'category1': '',
+    'Monthly TGT': paints_values['Monthly TGT'],
+    'Daily Tgt': paints_values['Daily Tgt'],
+    'MTD TGT': paints_values['MTD TGT'],
+    'PYM': paints_values['PYM'],
+    'Daily Achieved': actual_sums['Daily Achieved'],
+    'MTD Act.': actual_sums['MTD Act.'],
+    'Projected landing': actual_sums['Projected landing'],
+    'CM': actual_sums['CM'],
+    'Achieved vs Daily Tgt': safe_div(actual_sums['Daily Achieved'], paints_values['Daily Tgt']),
+    'MTD Var': safe_div(actual_sums['MTD Act.'], paints_values['MTD TGT']),
+    'Achieved VS Monthly tgt': safe_div(actual_sums['MTD Act.'], paints_values['Monthly TGT']),
+    'CM VS PYM': safe_div(actual_sums['CM'], paints_values['PYM']),
+    'is_totals': True
+}
+
+# 4. Append Totals row
+df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
+
+# Formatting
+for col in percent_cols:
+    df_display[col] = (df_display[col].astype(float) * 100).round(1)
+for col in df_display.columns:
+    if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
+        df_display[col] = df_display[col].round(1)
+
+# AgGrid setup
+# AgGrid setup
+gb = GridOptionsBuilder.from_dataframe(df_display)
+gb.configure_default_column(filter=True, sortable=True, resizable=True, autoHeight=True)
+gb.configure_column("is_totals", hide=True)
+
+# Style for % columns
+cell_style_jscode = JsCode("""
+function(params) {
+    if (params.value == null) return {};
+    if (params.value < 0) {
+        return {color: 'black', backgroundColor: '#ffc0cb', fontWeight: 'bold', textAlign: 'center'};
+    } else if (params.value > 0) {
+        return {color: 'black', backgroundColor: '#d0f0c0', textAlign: 'center'};
+    }
+    return {textAlign: 'center'};
+}
 """)
 
-gb = GridOptionsBuilder.from_dataframe(df)
-gb.configure_default_column(filterable=True, sortable=True, resizable=True)
-gb.configure_columns(
-    ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM'],
-    type=["numericColumn"], 
-    cellRenderer=JsCode("""
-        function(params) {
-            if(params.value < 0){
-                return '<span style="color:red;font-weight:bold;">' + (params.value*100).toFixed(1) + '%</span>';
-            }
-            else{
-                return '<span style="color:green;font-weight:bold;">' + (params.value*100).toFixed(1) + '%</span>';
-            }
-        }
-    """)
-)
-gb.configure_selection(selection_mode="single")
-gb.configure_pagination(paginationAutoPageSize=True)
-gridOptions = gb.build()
+# Apply formatting for % columns
+for col in percent_cols:
+    gb.configure_column(
+        col,
+        cellStyle=cell_style_jscode,
+        type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+        valueFormatter="x.toFixed(1) + '%'",
+        headerClass='header-center'
+    )
 
-st.subheader("Detailed Sales Table")
-grid_response = AgGrid(df, gridOptions=gridOptions, enable_enterprise_modules=False, theme='material', fit_columns_on_grid_load=True)
+# 💡 Apply comma formatting to numeric (non-percentage) columns
+for col in df_display.columns:
+    if pd.api.types.is_numeric_dtype(df_display[col]) and col not in percent_cols:
+        gb.configure_column(
+            col,
+            type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+            valueFormatter=JsCode("""
+                function(params) {
+                    return params.value != null 
+                        ? params.value.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) 
+                        : '';
+                }
+            """),
+            headerClass='header-center'
+        )
 
-# === EXCEL EXPORT ===
-def to_excel(df_export):
-    output = io.BytesIO()
-    writer = pd.ExcelWriter(output, engine='openpyxl')
-    df_export.to_excel(writer, index=False, sheet_name='Sales Data')
-    workbook = writer.book
-    worksheet = writer.sheets['Sales Data']
+# Totals row styling
+gb.configure_grid_options(getRowStyle=JsCode("""
+function(params) {
+    if (params.data.is_totals) {
+        return {
+            backgroundColor: '#b2dfdb',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            textAlign: 'center'
+        };
+    }
+    return {};
+}
+"""))
 
-    # Conditional formatting
-    red_fill = PatternFill(start_color='FF9999', end_color='FF9999', fill_type='solid')
-    green_fill = PatternFill(start_color='CCFFCC', end_color='CCFFCC', fill_type='solid')
+st.markdown("<style>.ag-theme-material .ag-cell{text-align:center !important;}</style>", unsafe_allow_html=True)
 
-    for col_letter in ['E', 'H', 'J', 'N']:  # Columns with percentage
-        col_idx = openpyxl.utils.column_index_from_string(col_letter)
-        worksheet.conditional_formatting.add(f'{col_letter}2:{col_letter}{len(df_export) + 1}',
-                                             CellIsRule(operator='lessThan', formula=['0'], fill=red_fill))
-        worksheet.conditional_formatting.add(f'{col_letter}2:{col_letter}{len(df_export) + 1}',
-                                             CellIsRule(operator='greaterThanOrEqual', formula=['0'], fill=green_fill))
+st.markdown("### <center>📋 <span style='font-size:22px; font-weight:bold; color:#7b38d8;'>PERFORMANCE TABLE</span></center>", unsafe_allow_html=True)
+AgGrid(df_display, gridOptions=gb.build(), enable_enterprise_modules=False,
+       allow_unsafe_jscode=True, theme="material", height=500, fit_columns_on_grid_load=False, reload_data=True)
 
-    writer.save()
-    processed_data = output.getvalue()
-    return processed_data
+# === EXCEL DOWNLOAD ===
+df_excel = df_display.drop(columns=['is_totals', '::auto_unique_id::'], errors='ignore').copy()
+for col in percent_cols:
+    df_excel[col] = df_excel[col] / 100  # revert to decimal for Excel
 
-excel_data = to_excel(df)
+excel_buffer = io.BytesIO()
+with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+    df_excel.to_excel(writer, index=False, sheet_name='Performance')
+    ws = writer.sheets['Performance']
+    header = list(df_excel.columns)
+    fill_neg = PatternFill(start_color='FFC0CB', end_color='FFC0CB', fill_type='solid')
+    fill_pos = PatternFill(start_color='D0F0C0', end_color='D0F0C0', fill_type='solid')
+    for col_name in percent_cols:
+        if col_name in header:
+            col_idx = header.index(col_name) + 1
+            for row in range(2, len(df_excel) + 2):
+                ws.cell(row=row, column=col_idx).number_format = '0.0%'
+            ws.conditional_formatting.add(
+                f"{openpyxl.utils.get_column_letter(col_idx)}2:{openpyxl.utils.get_column_letter(col_idx)}{len(df_excel)+1}",
+                CellIsRule(operator='lessThan', formula=['0'], fill=fill_neg))
+            ws.conditional_formatting.add(
+                f"{openpyxl.utils.get_column_letter(col_idx)}2:{openpyxl.utils.get_column_letter(col_idx)}{len(df_excel)+1}",
+                CellIsRule(operator='greaterThan', formula=['0'], fill=fill_pos))
 
-st.download_button(
-    label="📥 Download Excel",
-    data=excel_data,
-    file_name='sales_data.xlsx',
-    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-)
+excel_buffer.seek(0)
+st.download_button(label="📥 Download Table as Excel",
+                   data=excel_buffer,
+                   file_name="sales_dashboard_with_totals.xlsx",
+                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
