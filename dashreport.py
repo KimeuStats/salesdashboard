@@ -115,25 +115,47 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # === LOGO ===
-def load_base64_image_from_url(url):
-    response = requests.get(url)
+# === Function to Load Base64 Image from Private GitHub ===
+def load_base64_image_from_private_repo(owner, repo, path, token, branch="main"):
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return base64.b64encode(response.content).decode()
-    return None
+    else:
+        st.error(f"⚠️ Failed to load image. GitHub API returned status {response.status_code}")
+        return None
 
-logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
-logo_base64 = load_base64_image_from_url(logo_url)
+# === Load the Token from Streamlit Secrets ===
+github_token = st.secrets["GITHUB_PAT"]
+
+# === Parameters for Your Private Repo ===
+github_owner = "kimeustats"
+github_repo = "salesdashboard"
+file_path = "nhmllogo.png"  # Path to image in repo
+branch = "main"
+
+# === Load and Display the Logo ===
+logo_base64 = load_base64_image_from_private_repo(
+    owner=github_owner,
+    repo=github_repo,
+    path=file_path,
+    token=github_token,
+    branch=branch
+)
 
 if logo_base64:
     st.markdown(f"""
-        <div class="banner">
-            <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
+        <div style="text-align:center;">
+            <img src="data:image/png;base64,{logo_base64}" alt="Logo" width="200"/>
             <h1>Muthokinju Paints Sales Dashboard</h1>
         </div>
     """, unsafe_allow_html=True)
 else:
-    st.error("⚠️ Failed to load logo image.")
-
+    st.error("⚠️ Could not load logo.")
 # === VIEW SELECTOR ===
 st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
 
