@@ -14,6 +14,9 @@ import os
 
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
+# === INITIALIZE SESSION STATE ===
+if "current_view" not in st.session_state:
+    st.session_state.current_view = "branch"  # Default view
 
 # === GITHUB CONFIG ===
 GITHUB_PAT = st.secrets["github_pat"] if "github_pat" in st.secrets else os.getenv("GITHUB_PAT")
