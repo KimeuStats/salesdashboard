@@ -189,14 +189,48 @@ current_view_display = "🏢 Detailed View" if st.session_state.current_view == 
 st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
 
 # === LOAD DATA ===
-file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
+from io import BytesIO
+
+# === Function to Load File from Private GitHub ===
+def load_file_from_private_repo(owner, repo, path, token, branch="main"):
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return BytesIO(response.content)
+    else:
+        st.error(f"⚠️ Failed to load Excel file. GitHub API status: {response.status_code}")
+        return None
+
+# === Excel File Parameters ===
+excel_path = "data1.xlsx"  # relative path to the Excel file in the repo
+
+# === Load Excel File Securely ===
+excel_file = load_file_from_private_repo(
+    owner=github_owner,
+    repo=github_repo,
+    path=excel_path,
+    token=github_token,
+    branch=branch
+)
+
+# === Read DataFrames from Excel ===
 try:
-    sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
-    targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
-    prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
+    if excel_file:
+        sales = pd.read_excel(excel_file, sheet_name="CY", engine="openpyxl")
+        excel_file.seek(0)  # Reset pointer
+        targets = pd.read_excel(excel_file, sheet_name="TARGETS", engine="openpyxl")
+        excel_file.seek(0)
+        prev_year_sales = pd.read_excel(excel_file, sheet_name="PY", engine="openpyxl")
+    else:
+        st.stop()
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
+
 
 # === CLEAN DATA ===
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
