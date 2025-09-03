@@ -1,4 +1,5 @@
-import streamlit as st 
+# === IMPORTS ===
+import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
@@ -9,173 +10,87 @@ import io
 import openpyxl
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
+import os
 
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
-# === STYLES ===
-st.markdown("""
-    <style>
-        /* Container */
-        .main .block-container {
-            max-width: 1400px;
-            padding: 2rem 2rem;
-            margin: auto;
-        }
+# === GITHUB CONFIG ===
+# 🔐 GitHub Personal Access Token (PAT) must be securely stored
+GITHUB_PAT = st.secrets["github_pat"] if "github_pat" in st.secrets else os.getenv("GITHUB_PAT")
+REPO_OWNER = "kimeustats"
+REPO_NAME = "salesdashboard"
+BRANCH = "main"
 
-        /* Banner */
-        .banner {
-            width: 100%;
-            background-color: #3FA0A3;
-            padding: 3px 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
-        .banner img {
-            height: 52px;
-            margin-right: 15px;
-            border: 2px solid white;
-            box-shadow: 0 0 5px rgba(255,255,255,0.7);
-        }
-        .banner h1 {
-            color: white;
-            font-size: 26px;
-            font-weight: bold;
-            margin: 0;
-        }
-
-        /* Table Header */
-        .ag-theme-material .ag-header {
-            background-color: #7b38d8 !important;
-            color: white !important;
-            font-weight: bold !important;
-        }
-
-        /* Center Dashboard View title */
-        .dashboard-view-title {
-            text-align: center;
-            font-weight: bold;
-            margin-bottom: 1rem;
-            font-size: 1.3rem;
-        }
-
-        /* View Selector container */
-        .view-selector {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-bottom: 30px;
-            flex-wrap: nowrap;
-        }
-
-        /* Buttons styled as cards */
-        .view-button {
-            padding: 15px 30px;
-            border: 2px solid #7b38d8;
-            border-radius: 12px;
-            background-color: white;
-            color: #7b38d8;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 3px 8px rgba(123, 56, 216, 0.2);
-            transition: all 0.3s ease;
-            min-width: 140px;
-            text-align: center;
-            user-select: none;
-        }
-        .view-button:hover {
-            background-color: #7b38d8;
-            color: white;
-            box-shadow: 0 5px 15px rgba(123, 56, 216, 0.4);
-        }
-        .view-button.active {
-            background-color: #7b38d8;
-            color: white;
-            box-shadow: 0 5px 15px rgba(123, 56, 216, 0.6);
-        }
-
-        /* Responsive: On smaller screens (mobile), stack buttons in one horizontal scrollable row */
-        @media (max-width: 600px) {
-            .view-selector {
-                justify-content: flex-start;
-                gap: 12px;
-                overflow-x: auto;
-                padding-left: 10px;
-            }
-            .view-button {
-                min-width: 120px;
-                padding: 12px 18px;
-                font-size: 0.9rem;
-                flex-shrink: 0;
-            }
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# === LOGO ===
-def load_base64_image_from_url(url):
-    response = requests.get(url)
+def fetch_private_file(file_path):
+    """Fetch a file from a private GitHub repo using a PAT."""
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
+    headers = {
+        "Authorization": f"token {GITHUB_PAT}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
-        return base64.b64encode(response.content).decode()
-    return None
+        return response.content
+    else:
+        st.error(f"⚠️ Failed to fetch file `{file_path}` from GitHub (Status {response.status_code})")
+        st.stop()
 
-logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
-logo_base64 = load_base64_image_from_url(logo_url)
+# === LOAD LOGO ===
+def load_base64_logo(path):
+    content = fetch_private_file(path)
+    return base64.b64encode(content).decode()
 
+logo_base64 = load_base64_logo("nhmllogo.png")
 if logo_base64:
     st.markdown(f"""
         <div class="banner">
-            <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
-            <h1>Muthokinju Paints Sales Dashboard</h1>
+            <img class="logo" src="data:image/png;base64,{logo_base64}" alt="Logo" />
+            <h1 class="title">Muthokinju Paints Sales Dashboard</h1>
         </div>
     """, unsafe_allow_html=True)
 else:
     st.error("⚠️ Failed to load logo image.")
 
-# === VIEW SELECTOR ===
-st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
-
-# Wrap buttons in a div with view-selector class for flex styling
-st.markdown('<div class="view-selector">', unsafe_allow_html=True)
-view_col1, view_col2 = st.columns([1,1])
-with view_col1:
-    branch_view = st.button("🏢 Detailed View", key="branch_view", use_container_width=True)
-with view_col2:
-    general_view = st.button("🌐 General View", key="general_view", use_container_width=True)
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Initialize session state for view
-if 'current_view' not in st.session_state:
-    st.session_state.current_view = 'branch'
-
-if branch_view:
-    st.session_state.current_view = 'branch'
-elif general_view:
-    st.session_state.current_view = 'general'
-
-# Display current view with custom styling using markdown and CSS
-active_class_branch = "view-button active" if st.session_state.current_view == 'branch' else "view-button"
-active_class_general = "view-button active" if st.session_state.current_view == 'general' else "view-button"
-
-# To visually reflect the active state, you can alternatively replace buttons by clickable divs, 
-# but Streamlit buttons are a bit limited to fully style here. 
-# So keep the buttons and add a markdown showing current view nicely:
-
-current_view_display = "🏢 Detailed View" if st.session_state.current_view == 'branch' else "🌐 General View"
-st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
-
-# === LOAD DATA ===
-file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
+# === LOAD EXCEL DATA ===
+excel_bytes = fetch_private_file("data1.xlsx")
 try:
-    sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
-    targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
-    prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
+    with io.BytesIO(excel_bytes) as f:
+        sales = pd.read_excel(f, sheet_name="CY", engine="openpyxl")
+        f.seek(0)
+        targets = pd.read_excel(f, sheet_name="TARGETS", engine="openpyxl")
+        f.seek(0)
+        prev_year_sales = pd.read_excel(f, sheet_name="PY", engine="openpyxl")
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
 
+# === CUSTOM STYLES ===
+st.markdown("""
+    <style>
+        .banner {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 1rem;
+            padding: 10px 0 20px 0;
+            border-bottom: 2px solid #eee;
+        }
+        .logo {
+            width: 80px;
+            height: auto;
+        }
+        .title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #083b66;
+            margin: 0;
+        }
+        .reportview-container .main .block-container {
+            padding-top: 1rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 
 # === CLEAN DATA ===
