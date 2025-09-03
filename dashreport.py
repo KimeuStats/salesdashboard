@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
@@ -9,7 +9,6 @@ import io
 import openpyxl
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
-from io import BytesIO
 
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
@@ -116,47 +115,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # === LOGO ===
-# === Function to Load Base64 Image from Private GitHub ===
-def load_base64_image_from_private_repo(owner, repo, path, token, branch="main"):
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3.raw"
-    }
-    response = requests.get(url, headers=headers)
+def load_base64_image_from_url(url):
+    response = requests.get(url)
     if response.status_code == 200:
         return base64.b64encode(response.content).decode()
-    else:
-        st.error(f"⚠️ Failed to load image. GitHub API returned status {response.status_code}")
-        return None
+    return None
 
-# === Load the Token from Streamlit Secrets ===
-github_token = st.secrets["GITHUB_PAT"]
-
-# === Parameters for Your Private Repo ===
-github_owner = "kimeustats"
-github_repo = "salesdashboard"
-file_path = "nhmllogo.png"  # Path to image in repo
-branch = "main"
-
-# === Load and Display the Logo ===
-logo_base64 = load_base64_image_from_private_repo(
-    owner=github_owner,
-    repo=github_repo,
-    path=file_path,
-    token=github_token,
-    branch=branch
-)
+logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
+logo_base64 = load_base64_image_from_url(logo_url)
 
 if logo_base64:
     st.markdown(f"""
-        <div style="text-align:center;">
-            <img src="data:image/png;base64,{logo_base64}" alt="Logo" width="200"/>
+        <div class="banner">
+            <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
             <h1>Muthokinju Paints Sales Dashboard</h1>
         </div>
     """, unsafe_allow_html=True)
 else:
-    st.error("⚠️ Could not load logo.")
+    st.error("⚠️ Failed to load logo image.")
 
 # === VIEW SELECTOR ===
 st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
@@ -191,90 +167,13 @@ current_view_display = "🏢 Detailed View" if st.session_state.current_view == 
 st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
 
 # === LOAD DATA ===
-
-# --- FUNCTION: Load file from private repo ---
-@st.cache_data
-def load_file_from_github(owner, repo, path, token, branch="main"):
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3.raw"
-    }
-
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        return response.content  # Return bytes instead of BytesIO
-    else:
-        st.error(f"❌ Failed to fetch Excel file from GitHub.\n"
-                 f"Status: {response.status_code}\n"
-                 f"Details: {response.text}")
-        return None
-
-# --- FILE PARAMETERS ---
-excel_path = "data1.xlsx"  # Make sure this is exact
-branch = "main"
-
-# --- LOAD FILE ---
-st.markdown("---")
-st.subheader("📊 Loading Sales Data from GitHub")
-
-excel_content = load_file_from_github(
-    owner="kimeustats",
-    repo="salesdashboard",
-    path=excel_path,
-    token=st.secrets["GITHUB_PAT"],
-    branch=branch
-)
-
-# --- SAFETY CHECK BEFORE LOADING ---
-if not excel_content:
-    st.stop()
-
-# Create BytesIO object from the content
-excel_file = BytesIO(excel_content)
-
-# --- PREVIEW SHEET NAMES ---
+file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
 try:
-    excel_preview = pd.ExcelFile(excel_file, engine="openpyxl")
-    sheet_names = excel_preview.sheet_names
-    st.success(f"✅ Excel file loaded. Sheets found: {sheet_names}")
+    sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
+    targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
+    prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
 except Exception as e:
-    st.error(f"❌ Failed to open Excel file: {e}")
-    st.stop()
-
-# --- FUNCTION: Load a sheet safely ---
-@st.cache_data
-def load_excel_sheet(_excel_content, sheet_name):
-    try:
-        # Create a fresh BytesIO object for each sheet read
-        excel_io = BytesIO(_excel_content)
-        return pd.read_excel(excel_io, sheet_name=sheet_name, engine="openpyxl")
-    except Exception as e:
-        st.error(f"❌ Failed to read sheet '{sheet_name}': {e}")
-        return None
-
-# --- LOAD SHEETS IF PRESENT ---
-required_sheets = ["CY", "TARGETS", "PY"]
-sheet_dfs = {}
-
-for sheet in required_sheets:
-    if sheet in sheet_names:
-        df = load_excel_sheet(excel_content, sheet)
-        if df is not None:
-            st.success(f"✅ Loaded sheet: {sheet} ({df.shape[0]} rows, {df.shape[1]} columns)")
-            sheet_dfs[sheet] = df
-    else:
-        st.warning(f"⚠️ Sheet '{sheet}' not found in Excel file.")
-
-# --- Assign to variables for use later ---
-sales = sheet_dfs.get("CY", pd.DataFrame())
-targets = sheet_dfs.get("TARGETS", pd.DataFrame())
-prev_year_sales = sheet_dfs.get("PY", pd.DataFrame())
-
-# --- Final check ---
-if sales.empty or targets.empty or prev_year_sales.empty:
-    st.error("❌ One or more required sheets failed to load properly.")
+    st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
 
 
