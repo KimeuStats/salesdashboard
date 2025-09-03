@@ -206,7 +206,7 @@ def load_file_from_private_repo(owner, repo, path, token, branch="main"):
         return None
 
 # === Excel File Parameters ===
-excel_path = "data1.xlsx"  # relative path to the Excel file in the repo
+excel_path = "data1.xlsx"  # Make sure this matches exactly (case-sensitive)
 
 # === Load Excel File Securely ===
 excel_file = load_file_from_private_repo(
@@ -217,19 +217,29 @@ excel_file = load_file_from_private_repo(
     branch=branch
 )
 
+# DEBUG: Show constructed GitHub URL to verify
+st.write(f"🔗 Fetching Excel from GitHub path: `{excel_path}` (branch: `{branch}`)")
+
 # === Read DataFrames from Excel ===
 try:
     if excel_file:
         sales = pd.read_excel(excel_file, sheet_name="CY", engine="openpyxl")
-        excel_file.seek(0)  # Reset pointer
+        st.success("✅ 'CY' sheet loaded successfully.")
+        
+        excel_file.seek(0)
         targets = pd.read_excel(excel_file, sheet_name="TARGETS", engine="openpyxl")
+        st.success("✅ 'TARGETS' sheet loaded successfully.")
+        
         excel_file.seek(0)
         prev_year_sales = pd.read_excel(excel_file, sheet_name="PY", engine="openpyxl")
+        st.success("✅ 'PY' sheet loaded successfully.")
     else:
+        st.error("❌ Excel file is `None`. It was not fetched correctly from GitHub.")
         st.stop()
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
+
 
 
 # === CLEAN DATA ===
