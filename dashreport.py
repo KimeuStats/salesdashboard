@@ -421,10 +421,18 @@ kpi1 = df['MTD Act.'].sum()
 
 if current_view == 'branch':
     if current_branch and current_branch != "All":
+        # Specific branch selected - use paints target for that branch only
         paints_rows = df[(df['category1'].str.lower() == 'paints') & (df['branch'] == current_branch)]
+        kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
     else:
-        paints_rows = df[df['category1'].str.lower() == 'paints']
-    kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
+        # All branches selected - sum paints targets across all branches from original targets data
+        paints_targets = targets_agg[targets_agg['category1'].str.lower() == 'paints']
+        # Apply cluster and category filters if any
+        if selected_cluster != "All":
+            # Filter targets by cluster - need to map branch to cluster
+            cluster_branches = sales[sales["Cluster"] == selected_cluster]["branch"].unique()
+            paints_targets = paints_targets[paints_targets['branch'].isin(cluster_branches)]
+        kpi2 = paints_targets['monthly_target'].sum() if not paints_targets.empty else 0
 else:
     paints_rows = df[df['category1'].str.lower() == 'paints']
     kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
