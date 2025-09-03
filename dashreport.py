@@ -268,13 +268,10 @@ if st.session_state.current_view == 'general':
             .rename(columns={'amount': 'monthly_target'})
         )
 
-        # Previous year sales - ADJUSTED: MTD for current month date selection
-        prev_year_start = pd.Timestamp(end_dt.year - 1, end_dt.month, 1)
-        prev_year_end_dt = pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.day)
-        
+        # Previous year sales for all clusters
         prev_year_filtered = prev_year_sales[
-            (prev_year_sales['date'] >= prev_year_start) &
-            (prev_year_sales['date'] <= prev_year_end_dt)
+            (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+            (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
         ]
         if selected_category != "All":
             prev_year_filtered = prev_year_filtered[prev_year_filtered["category1"] == selected_category]
@@ -318,13 +315,10 @@ if st.session_state.current_view == 'general':
             .rename(columns={'amount': 'monthly_target', 'cluster': 'Cluster'})
         )
 
-        # Previous year filtering - ADJUSTED: MTD for current month date selection
-        prev_year_start = pd.Timestamp(end_dt.year - 1, end_dt.month, 1)
-        prev_year_end_dt = pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.day)
-        
+        # Previous year filtering
         prev_year_filtered = prev_year_sales[
-            (prev_year_sales['date'] >= prev_year_start) &
-            (prev_year_sales['date'] <= prev_year_end_dt)
+            (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+            (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
         ]
         prev_year_filtered = prev_year_filtered[prev_year_filtered["cluster"] == selected_cluster]
         if selected_category != "All":
@@ -362,13 +356,9 @@ else:
         .rename(columns={'amount': 'daily_achieved'})
     )
 
-    # Previous year filtering - ADJUSTED: MTD for current month date selection
-    prev_year_start = pd.Timestamp(end_dt.year - 1, end_dt.month, 1)
-    prev_year_end_dt = pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.day)
-    
     prev_year_filtered = prev_year_sales[
-        (prev_year_sales['date'] >= prev_year_start) &
-        (prev_year_sales['date'] <= prev_year_end_dt)
+        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
+        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
     ]
 
     pym_agg = (
@@ -421,18 +411,10 @@ kpi1 = df['MTD Act.'].sum()
 
 if current_view == 'branch':
     if current_branch and current_branch != "All":
-        # Specific branch selected - use paints target for that branch only
         paints_rows = df[(df['category1'].str.lower() == 'paints') & (df['branch'] == current_branch)]
-        kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
     else:
-        # All branches selected - sum paints targets across all branches from original targets data
-        paints_targets = targets_agg[targets_agg['category1'].str.lower() == 'paints']
-        # Apply cluster and category filters if any
-        if selected_cluster != "All":
-            # Filter targets by cluster - need to map branch to cluster
-            cluster_branches = sales[sales["Cluster"] == selected_cluster]["branch"].unique()
-            paints_targets = paints_targets[paints_targets['branch'].isin(cluster_branches)]
-        kpi2 = paints_targets['monthly_target'].sum() if not paints_targets.empty else 0
+        paints_rows = df[df['category1'].str.lower() == 'paints']
+    kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
 else:
     paints_rows = df[df['category1'].str.lower() == 'paints']
     kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
@@ -524,7 +506,7 @@ st.plotly_chart(fig, use_container_width=True)
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-# FIXED TOTALS LOGIC: Use paints row for targets in both views, sum all achieved values
+# 1. Get Paints row (case-insensitive)
 paints_row = df_display[df_display['category1'].str.lower() == 'paints']
 
 if paints_row.empty:
@@ -538,10 +520,10 @@ else:
         'PYM': paints_row['PYM'].values[0]
     }
 
-# Sum all achieved values (paints + other categories)
+# 2. Sum actuals
 actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
 
-# Calculate percentages
+# 3. Calculate percentages
 def safe_div(n, d): return (n - d) / d if d else 0
 
 totals = {
@@ -562,7 +544,7 @@ totals = {
     'is_totals': True
 }
 
-# Append Totals row
+# 4. Append Totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 
 # Formatting
