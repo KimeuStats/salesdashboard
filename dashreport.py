@@ -14,9 +14,10 @@ import os
 
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
-# === INITIALIZE SESSION STATE ===
-if "current_view" not in st.session_state:
-    st.session_state.current_view = "branch"  # Default view
+
+# === INIT SESSION STATE SAFELY ===
+view_default = "branch"
+current_view = st.session_state.get("current_view", view_default)
 
 # === GITHUB CONFIG ===
 GITHUB_PAT = st.secrets["github_pat"] if "github_pat" in st.secrets else os.getenv("GITHUB_PAT")
@@ -24,6 +25,7 @@ REPO_OWNER = "kimeustats"
 REPO_NAME = "salesdashboard"
 
 def fetch_private_file(file_path):
+    """Fetch a file from a private GitHub repo using a PAT."""
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
     headers = {
         "Authorization": f"token {GITHUB_PAT}",
@@ -39,14 +41,11 @@ def fetch_private_file(file_path):
 # === STYLES ===
 st.markdown("""
     <style>
-        /* Container */
         .main .block-container {
             max-width: 1400px;
             padding: 2rem 2rem;
             margin: auto;
         }
-
-        /* Banner */
         .banner {
             width: 100%;
             background-color: #3FA0A3;
@@ -68,23 +67,12 @@ st.markdown("""
             font-weight: bold;
             margin: 0;
         }
-
-        /* Table Header */
-        .ag-theme-material .ag-header {
-            background-color: #7b38d8 !important;
-            color: white !important;
-            font-weight: bold !important;
-        }
-
-        /* Center Dashboard View title */
         .dashboard-view-title {
             text-align: center;
             font-weight: bold;
             margin-bottom: 1rem;
             font-size: 1.3rem;
         }
-
-        /* View Selector container */
         .view-selector {
             display: flex;
             justify-content: center;
@@ -92,8 +80,6 @@ st.markdown("""
             margin-bottom: 30px;
             flex-wrap: nowrap;
         }
-
-        /* Buttons styled as cards */
         .view-button {
             padding: 15px 30px;
             border: 2px solid #7b38d8;
@@ -113,12 +99,6 @@ st.markdown("""
             color: white;
             box-shadow: 0 5px 15px rgba(123, 56, 216, 0.4);
         }
-        .view-button.active {
-            background-color: #7b38d8;
-            color: white;
-            box-shadow: 0 5px 15px rgba(123, 56, 216, 0.6);
-        }
-
         @media (max-width: 600px) {
             .view-selector {
                 justify-content: flex-start;
@@ -136,7 +116,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# === LOAD LOGO ===
+# === LOGO ===
 def load_base64_logo(path):
     content = fetch_private_file(path)
     return base64.b64encode(content).decode()
@@ -149,8 +129,6 @@ if logo_base64:
             <h1>Muthokinju Paints Sales Dashboard</h1>
         </div>
     """, unsafe_allow_html=True)
-else:
-    st.error("⚠️ Failed to load logo image.")
 
 # === VIEW SELECTOR ===
 st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
@@ -158,24 +136,18 @@ st.markdown('<div class="view-selector">', unsafe_allow_html=True)
 
 view_col1, view_col2 = st.columns([1, 1])
 with view_col1:
-    branch_view = st.button("🏢 Detailed View", key="branch_view", use_container_width=True)
+    if st.button("🏢 Detailed View"):
+        st.session_state.current_view = "branch"
 with view_col2:
-    general_view = st.button("🌐 General View", key="general_view", use_container_width=True)
+    if st.button("🌐 General View"):
+        st.session_state.current_view = "general"
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# Handle session state
-if 'current_view' not in st.session_state:
-    st.session_state.current_view = 'branch'
-
-if branch_view:
-    st.session_state.current_view = 'branch'
-elif general_view:
-    st.session_state.current_view = 'general'
-
-# Display current view
-current_view_display = "🏢 Detailed View" if st.session_state.current_view == 'branch' else "🌐 General View"
-st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
+# Use updated session state
+current_view = st.session_state.get("current_view", view_default)
+current_view_display = "🏢 Detailed View" if current_view == "branch" else "🌐 General View"
+st.markdown(f"<p style='text-align:center; font-weight:bold;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
 
 # === LOAD EXCEL DATA ===
 excel_bytes = fetch_private_file("data1.xlsx")
@@ -189,6 +161,14 @@ try:
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
+
+# === DEMO: Simple view-dependent behavior ===
+if current_view == "branch":
+    st.subheader("📊 Branch (Detailed) View Content")
+    st.dataframe(sales.head())
+else:
+    st.subheader("🌍 General View Content")
+    st.dataframe(targets.head())
 
 
 
