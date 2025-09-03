@@ -1,4 +1,4 @@
-import streamlit as st 
+loading data import streamlit as st 
 import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
@@ -115,24 +115,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # === LOGO ===
-def load_base64_image_from_url(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        return base64.b64encode(response.content).decode()
-    return None
+with open("nhmllogo.png", "rb") as image_file:
+    logo_base64 = base64.b64encode(image_file.read()).decode()
 
-logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
-logo_base64 = load_base64_image_from_url(logo_url)
-
-if logo_base64:
-    st.markdown(f"""
-        <div class="banner">
-            <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
-            <h1>Muthokinju Paints Sales Dashboard</h1>
-        </div>
-    """, unsafe_allow_html=True)
-else:
-    st.error("⚠️ Failed to load logo image.")
+st.markdown(f"""
+    <div class="banner">
+        <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
+        <h1>Muthokinju Paints Sales Dashboard</h1>
+    </div>
+""", unsafe_allow_html=True)
 
 # === VIEW SELECTOR ===
 st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
