@@ -115,27 +115,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # === LOGO ===
-def load_file_from_github(path):
-    
-    owner = "kimeustats"
-    repo = "salesdashboard"
-    branch = "main"
-    token = st.secrets["github"]["token"]
+def load_base64_image_from_url(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return base64.b64encode(response.content).decode()
+    return None
 
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
-    headers = {"Authorization": f"token {token}"}
+logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
+logo_base64 = load_base64_image_from_url(logo_url)
 
-    res = requests.get(url, headers=headers)
-    if res.status_code == 200:
-        return base64.b64decode(res.json()["content"])
-    else:
-        st.error(f"⚠️ GitHub API error loading {path}: {res.status_code}")
-        return None
-
-# Load logo
-logo_bytes = load_file_from_github("nhmllogo.png")
-if logo_bytes:
-    logo_base64 = base64.b64encode(logo_bytes).decode()
+if logo_base64:
     st.markdown(f"""
         <div class="banner">
             <img src="data:image/png;base64,{logo_base64}" alt="Logo" />
@@ -178,15 +167,14 @@ current_view_display = "🏢 Detailed View" if st.session_state.current_view == 
 st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
 
 # === LOAD DATA ===
-excel_bytes = load_file_from_github("data1.xlsx")
-if excel_bytes:
-    excel_io = io.BytesIO(excel_bytes)
-    sales = pd.read_excel(excel_io, sheet_name="CY", engine="openpyxl")
-    targets = pd.read_excel(excel_io, sheet_name="TARGETS", engine="openpyxl")
-    prev_year_sales = pd.read_excel(excel_io, sheet_name="PY", engine="openpyxl")
-else:
-    st.error("⚠️ Failed to load Excel data.")
-
+file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
+try:
+    sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
+    targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
+    prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
+except Exception as e:
+    st.error(f"⚠️ Failed to load Excel data: {e}")
+    st.stop()
 
 # === CLEAN DATA ===
 sales.columns = [col if col == 'Cluster' else col.lower() for col in sales.columns]
@@ -433,10 +421,18 @@ kpi1 = df['MTD Act.'].sum()
 
 if current_view == 'branch':
     if current_branch and current_branch != "All":
+        # Specific branch selected - use paints target for that branch only
         paints_rows = df[(df['category1'].str.lower() == 'paints') & (df['branch'] == current_branch)]
+        kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
     else:
-        paints_rows = df[df['category1'].str.lower() == 'paints']
-    kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
+        # All branches selected - sum paints targets across all branches from original targets data
+        paints_targets = targets_agg[targets_agg['category1'].str.lower() == 'paints']
+        # Apply cluster and category filters if any
+        if selected_cluster != "All":
+            # Filter targets by cluster - need to map branch to cluster
+            cluster_branches = sales[sales["Cluster"] == selected_cluster]["branch"].unique()
+            paints_targets = paints_targets[paints_targets['branch'].isin(cluster_branches)]
+        kpi2 = paints_targets['monthly_target'].sum() if not paints_targets.empty else 0
 else:
     paints_rows = df[df['category1'].str.lower() == 'paints']
     kpi2 = paints_rows['Monthly TGT'].sum() if not paints_rows.empty else 0
