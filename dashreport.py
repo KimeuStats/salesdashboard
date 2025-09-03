@@ -1,4 +1,4 @@
-import streamlit as st 
+import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
@@ -9,6 +9,7 @@ import io
 import openpyxl
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
+from io import BytesIO
 
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
@@ -156,6 +157,7 @@ if logo_base64:
     """, unsafe_allow_html=True)
 else:
     st.error("⚠️ Could not load logo.")
+
 # === VIEW SELECTOR ===
 st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
 
@@ -189,9 +191,9 @@ current_view_display = "🏢 Detailed View" if st.session_state.current_view == 
 st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
 
 # === LOAD DATA ===
-from io import BytesIO
 
 # --- FUNCTION: Load file from private repo ---
+@st.cache_data
 def load_file_from_github(owner, repo, path, token, branch="main"):
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
     headers = {
@@ -202,7 +204,7 @@ def load_file_from_github(owner, repo, path, token, branch="main"):
     response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
-        return BytesIO(response.content)
+        return response.content  # Return bytes instead of BytesIO
     else:
         st.error(f"❌ Failed to fetch Excel file from GitHub.\n"
                  f"Status: {response.status_code}\n"
@@ -217,7 +219,7 @@ branch = "main"
 st.markdown("---")
 st.subheader("📊 Loading Sales Data from GitHub")
 
-excel_file = load_file_from_github(
+excel_content = load_file_from_github(
     owner="kimeustats",
     repo="salesdashboard",
     path=excel_path,
@@ -226,8 +228,11 @@ excel_file = load_file_from_github(
 )
 
 # --- SAFETY CHECK BEFORE LOADING ---
-if not excel_file:
+if not excel_content:
     st.stop()
+
+# Create BytesIO object from the content
+excel_file = BytesIO(excel_content)
 
 # --- PREVIEW SHEET NAMES ---
 try:
@@ -239,9 +244,11 @@ except Exception as e:
     st.stop()
 
 # --- FUNCTION: Load a sheet safely ---
-def load_excel_sheet(excel_io, sheet_name):
+@st.cache_data
+def load_excel_sheet(_excel_content, sheet_name):
     try:
-        excel_io.seek(0)  # Reset pointer before each read
+        # Create a fresh BytesIO object for each sheet read
+        excel_io = BytesIO(_excel_content)
         return pd.read_excel(excel_io, sheet_name=sheet_name, engine="openpyxl")
     except Exception as e:
         st.error(f"❌ Failed to read sheet '{sheet_name}': {e}")
@@ -253,9 +260,9 @@ sheet_dfs = {}
 
 for sheet in required_sheets:
     if sheet in sheet_names:
-        df = load_excel_sheet(excel_file, sheet)
+        df = load_excel_sheet(excel_content, sheet)
         if df is not None:
-            st.success(f"✅ Loaded sheet: {sheet} ({df.shape[0]} rows)")
+            st.success(f"✅ Loaded sheet: {sheet} ({df.shape[0]} rows, {df.shape[1]} columns)")
             sheet_dfs[sheet] = df
     else:
         st.warning(f"⚠️ Sheet '{sheet}' not found in Excel file.")
@@ -269,6 +276,7 @@ prev_year_sales = sheet_dfs.get("PY", pd.DataFrame())
 if sales.empty or targets.empty or prev_year_sales.empty:
     st.error("❌ One or more required sheets failed to load properly.")
     st.stop()
+
 
 
 # === CLEAN DATA ===
