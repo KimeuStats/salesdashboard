@@ -191,55 +191,84 @@ st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>C
 # === LOAD DATA ===
 from io import BytesIO
 
-# === Function to Load File from Private GitHub ===
-def load_file_from_private_repo(owner, repo, path, token, branch="main"):
+# --- FUNCTION: Load file from private repo ---
+def load_file_from_github(owner, repo, path, token, branch="main"):
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3.raw"
     }
+
     response = requests.get(url, headers=headers)
+
     if response.status_code == 200:
         return BytesIO(response.content)
     else:
-        st.error(f"⚠️ Failed to load Excel file. GitHub API status: {response.status_code}")
+        st.error(f"❌ Failed to fetch Excel file from GitHub.\n"
+                 f"Status: {response.status_code}\n"
+                 f"Details: {response.text}")
         return None
 
-# === Excel File Parameters ===
-excel_path = "data1.xlsx"  # Make sure this matches exactly (case-sensitive)
+# --- FILE PARAMETERS ---
+excel_path = "data1.xlsx"  # Make sure this is exact
+branch = "main"
 
-# === Load Excel File Securely ===
-excel_file = load_file_from_private_repo(
-    owner=github_owner,
-    repo=github_repo,
+# --- LOAD FILE ---
+st.markdown("---")
+st.subheader("📊 Loading Sales Data from GitHub")
+
+excel_file = load_file_from_github(
+    owner="kimeustats",
+    repo="salesdashboard",
     path=excel_path,
-    token=github_token,
+    token=st.secrets["GITHUB_PAT"],
     branch=branch
 )
 
-# DEBUG: Show constructed GitHub URL to verify
-st.write(f"🔗 Fetching Excel from GitHub path: `{excel_path}` (branch: `{branch}`)")
-
-# === Read DataFrames from Excel ===
-try:
-    if excel_file:
-        sales = pd.read_excel(excel_file, sheet_name="CY", engine="openpyxl")
-        st.success("✅ 'CY' sheet loaded successfully.")
-        
-        excel_file.seek(0)
-        targets = pd.read_excel(excel_file, sheet_name="TARGETS", engine="openpyxl")
-        st.success("✅ 'TARGETS' sheet loaded successfully.")
-        
-        excel_file.seek(0)
-        prev_year_sales = pd.read_excel(excel_file, sheet_name="PY", engine="openpyxl")
-        st.success("✅ 'PY' sheet loaded successfully.")
-    else:
-        st.error("❌ Excel file is `None`. It was not fetched correctly from GitHub.")
-        st.stop()
-except Exception as e:
-    st.error(f"⚠️ Failed to load Excel data: {e}")
+# --- SAFETY CHECK BEFORE LOADING ---
+if not excel_file:
     st.stop()
 
+# --- PREVIEW SHEET NAMES ---
+try:
+    excel_preview = pd.ExcelFile(excel_file, engine="openpyxl")
+    sheet_names = excel_preview.sheet_names
+    st.success(f"✅ Excel file loaded. Sheets found: {sheet_names}")
+except Exception as e:
+    st.error(f"❌ Failed to open Excel file: {e}")
+    st.stop()
+
+# --- FUNCTION: Load a sheet safely ---
+def load_excel_sheet(excel_io, sheet_name):
+    try:
+        excel_io.seek(0)  # Reset pointer before each read
+        return pd.read_excel(excel_io, sheet_name=sheet_name, engine="openpyxl")
+    except Exception as e:
+        st.error(f"❌ Failed to read sheet '{sheet_name}': {e}")
+        return None
+
+# --- LOAD SHEETS IF PRESENT ---
+required_sheets = ["CY", "TARGETS", "PY"]
+sheet_dfs = {}
+
+for sheet in required_sheets:
+    if sheet in sheet_names:
+        df = load_excel_sheet(excel_file, sheet)
+        if df is not None:
+            st.success(f"✅ Loaded sheet: {sheet} ({df.shape[0]} rows)")
+            sheet_dfs[sheet] = df
+    else:
+        st.warning(f"⚠️ Sheet '{sheet}' not found in Excel file.")
+
+# --- Assign to variables for use later ---
+sales = sheet_dfs.get("CY", pd.DataFrame())
+targets = sheet_dfs.get("TARGETS", pd.DataFrame())
+prev_year_sales = sheet_dfs.get("PY", pd.DataFrame())
+
+# --- Final check ---
+if sales.empty or targets.empty or prev_year_sales.empty:
+    st.error("❌ One or more required sheets failed to load properly.")
+    st.stop()
 
 
 # === CLEAN DATA ===
