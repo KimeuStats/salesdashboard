@@ -268,10 +268,13 @@ if st.session_state.current_view == 'general':
             .rename(columns={'amount': 'monthly_target'})
         )
 
-        # Previous year sales for all clusters
+        # Previous year sales - ADJUSTED: MTD for current month date selection
+        prev_year_start = pd.Timestamp(end_dt.year - 1, end_dt.month, 1)
+        prev_year_end_dt = pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.day)
+        
         prev_year_filtered = prev_year_sales[
-            (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
-            (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+            (prev_year_sales['date'] >= prev_year_start) &
+            (prev_year_sales['date'] <= prev_year_end_dt)
         ]
         if selected_category != "All":
             prev_year_filtered = prev_year_filtered[prev_year_filtered["category1"] == selected_category]
@@ -315,10 +318,13 @@ if st.session_state.current_view == 'general':
             .rename(columns={'amount': 'monthly_target', 'cluster': 'Cluster'})
         )
 
-        # Previous year filtering
+        # Previous year filtering - ADJUSTED: MTD for current month date selection
+        prev_year_start = pd.Timestamp(end_dt.year - 1, end_dt.month, 1)
+        prev_year_end_dt = pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.day)
+        
         prev_year_filtered = prev_year_sales[
-            (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
-            (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+            (prev_year_sales['date'] >= prev_year_start) &
+            (prev_year_sales['date'] <= prev_year_end_dt)
         ]
         prev_year_filtered = prev_year_filtered[prev_year_filtered["cluster"] == selected_cluster]
         if selected_category != "All":
@@ -356,9 +362,13 @@ else:
         .rename(columns={'amount': 'daily_achieved'})
     )
 
+    # Previous year filtering - ADJUSTED: MTD for current month date selection
+    prev_year_start = pd.Timestamp(end_dt.year - 1, end_dt.month, 1)
+    prev_year_end_dt = pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.day)
+    
     prev_year_filtered = prev_year_sales[
-        (prev_year_sales['date'] >= pd.Timestamp(end_dt.year - 1, end_dt.month, 1)) &
-        (prev_year_sales['date'] <= pd.Timestamp(end_dt.year - 1, end_dt.month, end_dt.days_in_month))
+        (prev_year_sales['date'] >= prev_year_start) &
+        (prev_year_sales['date'] <= prev_year_end_dt)
     ]
 
     pym_agg = (
@@ -506,7 +516,7 @@ st.plotly_chart(fig, use_container_width=True)
 df_display = df.copy()
 percent_cols = ['Achieved vs Daily Tgt', 'MTD Var', 'Achieved VS Monthly tgt', 'CM VS PYM']
 
-# 1. Get Paints row (case-insensitive)
+# FIXED TOTALS LOGIC: Use paints row for targets in both views, sum all achieved values
 paints_row = df_display[df_display['category1'].str.lower() == 'paints']
 
 if paints_row.empty:
@@ -520,10 +530,10 @@ else:
         'PYM': paints_row['PYM'].values[0]
     }
 
-# 2. Sum actuals
+# Sum all achieved values (paints + other categories)
 actual_sums = df_display[['Daily Achieved', 'MTD Act.', 'Projected landing', 'CM']].sum()
 
-# 3. Calculate percentages
+# Calculate percentages
 def safe_div(n, d): return (n - d) / d if d else 0
 
 totals = {
@@ -544,7 +554,7 @@ totals = {
     'is_totals': True
 }
 
-# 4. Append Totals row
+# Append Totals row
 df_display = pd.concat([df_display, pd.DataFrame([totals])], ignore_index=True)
 
 # Formatting
