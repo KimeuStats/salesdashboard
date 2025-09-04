@@ -124,8 +124,8 @@ def load_base64_image_from_url(url, token=None):
 
 # === GITHUB VARIABLES ===
 github_token = st.secrets["github"]["token"]
-repo_owner = "your-username"              # 🔁 Replace with your GitHub username
-repo_name = "your-private-repo"           # 🔁 Replace with your repo name
+repo_owner = "kimeustats"              # 🔁 Replace with your GitHub username
+repo_name = "salesdashboard"           # 🔁 Replace with your repo name
 branch = "main"
 
 # === LOGO LOAD ===
