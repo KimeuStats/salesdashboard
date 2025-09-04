@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
@@ -13,30 +13,117 @@ from openpyxl.formatting.rule import CellIsRule
 # === PAGE CONFIG ===
 st.set_page_config(layout="wide", page_title="Muthokinju Paints Sales Dashboard")
 
-# === GITHUB PRIVATE REPO ACCESS ===
-github_token = st.secrets["GITHUB_PAT"]
-repo_owner = "kimeustats"  # 👈 Replace with your GitHub username
-repo_name = "salesdashboard"         # 👈 Replace with your repository name
-branch = "main"                      # or whichever branch you want
-
-def read_private_file_from_github(path_in_repo):
-    url = f"https://raw.githubusercontent.com/{repo_owner}/{repo_name}/{branch}/{path_in_repo}"
-    headers = {"Authorization": f"token {github_token}"}
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.content
-    else:
-        st.error(f"Failed to load {path_in_repo} from GitHub. Status code: {response.status_code}")
-        st.stop()
-
-# === LOAD LOGO ===
-logo_bytes = read_private_file_from_github("nhmllogo.png")  # 👈 Your logo file path in root
-logo_base64 = base64.b64encode(logo_bytes).decode()
-
 # === STYLES ===
-st.markdown("""<style>/* (your original CSS styles here) */</style>""", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+        /* Container */
+        .main .block-container {
+            max-width: 1400px;
+            padding: 2rem 2rem;
+            margin: auto;
+        }
 
-# === LOGO HEADER ===
+        /* Banner */
+        .banner {
+            width: 100%;
+            background-color: #3FA0A3;
+            padding: 3px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .banner img {
+            height: 52px;
+            margin-right: 15px;
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(255,255,255,0.7);
+        }
+        .banner h1 {
+            color: white;
+            font-size: 26px;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        /* Table Header */
+        .ag-theme-material .ag-header {
+            background-color: #7b38d8 !important;
+            color: white !important;
+            font-weight: bold !important;
+        }
+
+        /* Center Dashboard View title */
+        .dashboard-view-title {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+
+        /* View Selector container */
+        .view-selector {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: nowrap;
+        }
+
+        /* Buttons styled as cards */
+        .view-button {
+            padding: 15px 30px;
+            border: 2px solid #7b38d8;
+            border-radius: 12px;
+            background-color: white;
+            color: #7b38d8;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 3px 8px rgba(123, 56, 216, 0.2);
+            transition: all 0.3s ease;
+            min-width: 140px;
+            text-align: center;
+            user-select: none;
+        }
+        .view-button:hover {
+            background-color: #7b38d8;
+            color: white;
+            box-shadow: 0 5px 15px rgba(123, 56, 216, 0.4);
+        }
+        .view-button.active {
+            background-color: #7b38d8;
+            color: white;
+            box-shadow: 0 5px 15px rgba(123, 56, 216, 0.6);
+        }
+
+        /* Responsive: On smaller screens (mobile), stack buttons in one horizontal scrollable row */
+        @media (max-width: 600px) {
+            .view-selector {
+                justify-content: flex-start;
+                gap: 12px;
+                overflow-x: auto;
+                padding-left: 10px;
+            }
+            .view-button {
+                min-width: 120px;
+                padding: 12px 18px;
+                font-size: 0.9rem;
+                flex-shrink: 0;
+            }
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# === LOGO ===
+def load_base64_image_from_url(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return base64.b64encode(response.content).decode()
+    return None
+
+logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
+logo_base64 = load_base64_image_from_url(logo_url)
+
 if logo_base64:
     st.markdown(f"""
         <div class="banner">
@@ -47,12 +134,44 @@ if logo_base64:
 else:
     st.error("⚠️ Failed to load logo image.")
 
-# === LOAD EXCEL FILE ===
-excel_bytes = read_private_file_from_github("data1.xlsx")  # 👈 Your Excel file path in root
+# === VIEW SELECTOR ===
+st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
+
+# Wrap buttons in a div with view-selector class for flex styling
+st.markdown('<div class="view-selector">', unsafe_allow_html=True)
+view_col1, view_col2 = st.columns([1,1])
+with view_col1:
+    branch_view = st.button("🏢 Detailed View", key="branch_view", use_container_width=True)
+with view_col2:
+    general_view = st.button("🌐 General View", key="general_view", use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Initialize session state for view
+if 'current_view' not in st.session_state:
+    st.session_state.current_view = 'branch'
+
+if branch_view:
+    st.session_state.current_view = 'branch'
+elif general_view:
+    st.session_state.current_view = 'general'
+
+# Display current view with custom styling using markdown and CSS
+active_class_branch = "view-button active" if st.session_state.current_view == 'branch' else "view-button"
+active_class_general = "view-button active" if st.session_state.current_view == 'general' else "view-button"
+
+# To visually reflect the active state, you can alternatively replace buttons by clickable divs, 
+# but Streamlit buttons are a bit limited to fully style here. 
+# So keep the buttons and add a markdown showing current view nicely:
+
+current_view_display = "🏢 Detailed View" if st.session_state.current_view == 'branch' else "🌐 General View"
+st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
+
+# === LOAD DATA ===
+file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
 try:
-    sales = pd.read_excel(io.BytesIO(excel_bytes), sheet_name="CY", engine="openpyxl")
-    targets = pd.read_excel(io.BytesIO(excel_bytes), sheet_name="TARGETS", engine="openpyxl")
-    prev_year_sales = pd.read_excel(io.BytesIO(excel_bytes), sheet_name="PY", engine="openpyxl")
+    sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
+    targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
+    prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
 except Exception as e:
     st.error(f"⚠️ Failed to load Excel data: {e}")
     st.stop()
