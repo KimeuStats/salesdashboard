@@ -114,15 +114,24 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# === LOGO ===
-def load_base64_image_from_url(url):
-    response = requests.get(url)
+# === LOAD LOGO ===
+def load_base64_image_from_url(url, token=None):
+    headers = {"Authorization": f"token {token}"} if token else {}
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return base64.b64encode(response.content).decode()
     return None
 
-logo_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/nhmllogo.png"
-logo_base64 = load_base64_image_from_url(logo_url)
+# === GITHUB VARIABLES ===
+github_token = st.secrets["github"]["token"]
+repo_owner = "your-username"              # 🔁 Replace with your GitHub username
+repo_name = "your-private-repo"           # 🔁 Replace with your repo name
+branch = "main"
+
+# === LOGO LOAD ===
+logo_path = "nhmllogo.png"  # Logo is in root
+logo_url = f"https://raw.githubusercontent.com/{repo_owner}/{repo_name}/{branch}/{logo_path}"
+logo_base64 = load_base64_image_from_url(logo_url, token=github_token)
 
 if logo_base64:
     st.markdown(f"""
@@ -136,9 +145,6 @@ else:
 
 # === VIEW SELECTOR ===
 st.markdown('<div class="dashboard-view-title">🧭 Dashboard View</div>', unsafe_allow_html=True)
-
-# Wrap buttons in a div with view-selector class for flex styling
-st.markdown('<div class="view-selector">', unsafe_allow_html=True)
 view_col1, view_col2 = st.columns([1,1])
 with view_col1:
     branch_view = st.button("🏢 Detailed View", key="branch_view", use_container_width=True)
@@ -146,36 +152,40 @@ with view_col2:
     general_view = st.button("🌐 General View", key="general_view", use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-# Initialize session state for view
 if 'current_view' not in st.session_state:
     st.session_state.current_view = 'branch'
-
 if branch_view:
     st.session_state.current_view = 'branch'
 elif general_view:
     st.session_state.current_view = 'general'
 
-# Display current view with custom styling using markdown and CSS
 active_class_branch = "view-button active" if st.session_state.current_view == 'branch' else "view-button"
 active_class_general = "view-button active" if st.session_state.current_view == 'general' else "view-button"
-
-# To visually reflect the active state, you can alternatively replace buttons by clickable divs, 
-# but Streamlit buttons are a bit limited to fully style here. 
-# So keep the buttons and add a markdown showing current view nicely:
-
 current_view_display = "🏢 Detailed View" if st.session_state.current_view == 'branch' else "🌐 General View"
 st.markdown(f"<p style='text-align:center; font-weight:bold; margin-top:10px;'>Current View: {current_view_display}</p>", unsafe_allow_html=True)
 
-# === LOAD DATA ===
-file_url = "https://raw.githubusercontent.com/kimeustats/salesdashboard/main/data1.xlsx"
-try:
-    sales = pd.read_excel(file_url, sheet_name="CY", engine="openpyxl")
-    targets = pd.read_excel(file_url, sheet_name="TARGETS", engine="openpyxl")
-    prev_year_sales = pd.read_excel(file_url, sheet_name="PY", engine="openpyxl")
-except Exception as e:
-    st.error(f"⚠️ Failed to load Excel data: {e}")
-    st.stop()
+# === LOAD EXCEL FILE FROM PRIVATE REPO ===
+file_path = "data1.xlsx"  # Excel is in root
+api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{file_path}?ref={branch}"
+headers = {
+    "Authorization": f"token {github_token}",
+    "Accept": "application/vnd.github.v3.raw"
+}
 
+response = requests.get(api_url, headers=headers)
+
+if response.status_code == 200:
+    excel_data = io.BytesIO(response.content)
+    try:
+        sales = pd.read_excel(excel_data, sheet_name="CY", engine="openpyxl")
+        targets = pd.read_excel(excel_data, sheet_name="TARGETS", engine="openpyxl")
+        prev_year_sales = pd.read_excel(excel_data, sheet_name="PY", engine="openpyxl")
+    except Exception as e:
+        st.error(f"⚠️ Failed to read Excel data: {e}")
+        st.stop()
+else:
+    st.error(f"⚠️ Failed to load file from GitHub. Status code: {response.status_code}")
+    st.stop()
 
 
 # === CLEAN DATA ===
